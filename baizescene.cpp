@@ -431,6 +431,10 @@ void BaizeScene::deserializeFromJson(const QJsonObject &obj, const CardDeck &car
         else
         {
             QList<CardPixmapItem *> cardItems;
+            CardPixmapItem *cardItem;
+            for (QGraphicsItem *item : selectedItems())
+                if ((cardItem = dynamic_cast<CardPixmapItem *>(item)))
+                    cardItems.append(cardItem);
             clearSelection();
             emit multipleCardsMoved(cardItems);
         }
