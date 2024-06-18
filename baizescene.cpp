@@ -217,7 +217,7 @@ CardPixmapItem *BaizeScene::addCard(const Card *card, int x, int y)
     CardPixmapItem *item = new CardPixmapItem;
     item->setPixmap(pixmap);
     item->setFlag(QGraphicsItem::ItemIsMovable);
-//    item->setFlag(QGraphicsItem::ItemIsSelectable);
+    item->setFlag(QGraphicsItem::ItemIsSelectable);
     addItem(item);
     // associate item with card passed in
     item->card = card;
@@ -421,8 +421,19 @@ void BaizeScene::deserializeFromJson(const QJsonObject &obj, const CardDeck &car
 
     if (grabbedItem && !mouseGrabberItem())
     {
-        CardPixmapItem *cardItem = dynamic_cast<CardPixmapItem *>(grabbedItem);
-        if (cardItem)
-            emit cardMoved(cardItem);
+        if (selectedItems().count() == 1)
+        {
+            CardPixmapItem *cardItem = dynamic_cast<CardPixmapItem *>(grabbedItem);
+            clearSelection();
+            if (cardItem)
+                emit singleCardMoved(cardItem);
+        }
+        else
+        {
+            QList<CardPixmapItem *> cardItems;
+            clearSelection();
+            emit multipleCardsMoved(cardItems);
+        }
     }
+
 }

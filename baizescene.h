@@ -111,7 +111,8 @@ protected:
     virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
 
 signals:
-    void cardMoved(CardPixmapItem *cardPixmapItem);
+    void singleCardMoved(CardPixmapItem *cardPixmapItem);
+    void multipleCardsMoved(QList<CardPixmapItem *> cardPixmapItems);
     void drawPileDoubleClicked();
 };
 

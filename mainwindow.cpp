@@ -24,8 +24,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     baizeScene->setSceneRect(-1250, -1000, 2500, 2000);
 
-//    baizeView->setDragMode(QGraphicsView::RubberBandDrag);
-//    baizeView->setRubberBandSelectionMode(Qt::ContainsItemShape);
+    baizeView->setDragMode(QGraphicsView::RubberBandDrag);
+    baizeView->setRubberBandSelectionMode(Qt::ContainsItemShape);
 
     setupUi();
 
@@ -34,7 +34,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // signal connections
     connect(baizeView, &BaizeView::viewCoordinatesChanged, this, &MainWindow::baizeViewCoordinatesChanged);
-    connect(baizeScene, &BaizeScene::cardMoved, this, &MainWindow::baizeSceneCardMoved);
+    connect(baizeScene, &BaizeScene::singleCardMoved, this, &MainWindow::baizeSceneSingleCardMoved);
+    connect(baizeScene, &BaizeScene::multipleCardsMoved, this, &MainWindow::baizeSceneMultipleCardsMoved);
     connect(baizeScene, &BaizeScene::drawPileDoubleClicked, this, &MainWindow::takeCardFromDrawPile);
 
     cardDeck.createCards();
@@ -251,26 +252,17 @@ void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
 void MainWindow::shuffleAndDeal()
 {
     baizeScene->reset();
-    cardGroups.clearGroups();
-
-    cardDeck.shuffle();
-
-    hands.dealHands(cardDeck);
-    dealInitialFreeCards();
+    logicalModel.shuffleAndDeal();
 }
 
-void MainWindow::dealInitialFreeCards()
+void MainWindow::showInitialFreeCards()
 {
+    Q_ASSERT(cardDeck.initialFreeCards().count() == 4);
     for (int i = 0; i < 4; i++)
     {
-        const Card *card = cardDeck.dealNextCard();
-        cardDeck.addInitialFreeCard(card);
+        const Card *card = cardDeck.initialFreeCards().at(i);
         baizeScene->addCard(card, -275 + i * 150, -300);
-        CardGroup group;
-        group.append(card);
-        cardGroups.append(group);
-        Q_ASSERT(!group.isGoodSet());
-        Q_ASSERT(group.count() == 1 && cardDeck.isInitialFreeCard(group.at(0)));
+        const CardGroup &group(logicalModel.initialFreeCardGroup(card));
         baizeScene->layoutCardsAsGroup(group, true, true);
     }
 }
@@ -289,20 +281,6 @@ int MainWindow::findCardInHandArea(const CardPixmapItem *item) const
     return -1;
 }
 
-bool MainWindow::isInitialCardGroup(const CardGroup &group) const
-{
-    return (group.count() == 1 && cardDeck.isInitialFreeCard(group.at(0)));
-}
-
-CardGroups MainWindow::badSetGroups() const
-{
-    CardGroups badSets;
-    for (const CardGroup &group : cardGroups)
-        if (!group.isGoodSet() && !isInitialCardGroup(group))
-            badSets.append(group);
-    return badSets;
-}
-
 void MainWindow::tidyGroups()
 {
     cardGroups.removeEmptyGroups();
@@ -311,8 +289,25 @@ void MainWindow::tidyGroups()
     {
         group.rearrangeForSets();
         bool isBadSetGroup = !group.isGoodSet();
-        baizeScene->layoutCardsAsGroup(group, isBadSetGroup, isInitialCardGroup(group));
+        bool isInitialCardGroup = logicalModel.isInitialCardGroup(group);
+        baizeScene->layoutCardsAsGroup(group, isBadSetGroup, isInitialCardGroup);
     }
+}
+
+bool MainWindow::havePlayedCard() const
+{
+   for (const Card *card : logicalModel.startOfTurnHand())
+       if (!hands[activePlayer].contains(card))
+               return true;
+    return false;
+}
+
+void MainWindow::startTurn()
+{
+    haveDrawnCard = false;
+    logicalModel.startOfTurn();
+    serializationDoc = serializeToJson();
+    updateDrawCardEndTurnAction();
 }
 
 QJsonDocument MainWindow::serializeToJson() const
@@ -347,7 +342,7 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     showHands();
 }
 
-/*slot*/ void MainWindow::baizeSceneCardMoved(CardPixmapItem *item)
+/*slot*/ void MainWindow::baizeSceneSingleCardMoved(CardPixmapItem *item)
 {
     Q_ASSERT(item);
     Q_ASSERT(item->card);
@@ -391,10 +386,7 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
             else
                 cardGroups[onGroupNow].append(item->card);
             if (wasInHand == activePlayer)
-            {
-                havePlayedCard = true;
                 updateDrawCardEndTurnAction();
-            }
         }
     }
     else
@@ -442,15 +434,20 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     updateDrawCardEndTurnAction();
 }
 
+/*slot*/ void MainWindow::baizeSceneMultipleCardsMoved(QList<CardPixmapItem *> items)
+{
+    Q_UNUSED(items);
+    // tidy up
+    showHand(activePlayer, true);
+    tidyGroups();
+}
+
 /*slot*/ void MainWindow::takeCardFromDrawPile()
 {
-    if (havePlayedCard || haveDrawnCard)
+    if (havePlayedCard() || haveDrawnCard)
         return;
 
-    const Card *card = cardDeck.dealNextCard();
-    CardHand &hand(hands[activePlayer]);
-    hand.append(card);
-    hand.sortHand();
+    const Card *card = logicalModel.takeCardFromDrawPile();
     showHand(activePlayer, true);
     baizeScene->blinkingCard()->start(card);
 
@@ -470,18 +467,17 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 /*slot*/ void MainWindow::actionDeal()
 {
     shuffleAndDeal();
+    showInitialFreeCards();
     this->activePlayer = 0;
-    this->havePlayedCard = this->haveDrawnCard = false;
-    updateDrawCardEndTurnAction();
     sortAndShow();
 
-    serializationDoc = serializeToJson();
+    startTurn();
 }
 
 /*slot*/ void MainWindow::actionRestartTurn()
 {
     deserializeFromJson(serializationDoc);
-    havePlayedCard = haveDrawnCard = false;
+    haveDrawnCard = false;
     updateDrawCardEndTurnAction();
     tidyGroups();
     showHands();
@@ -489,14 +485,14 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 
 void MainWindow::updateDrawCardEndTurnAction()
 {
-    menuActionDrawCardEndTurn->setText((havePlayedCard || haveDrawnCard) ? "End Turn" : "Draw Card");
+    menuActionDrawCardEndTurn->setText((havePlayedCard() || haveDrawnCard) ? "End Turn" : "Draw Card");
     baizeScene->preventMovingCards(haveDrawnCard);
-    menuActionDrawCardEndTurn->setEnabled(badSetGroups().isEmpty());
+    menuActionDrawCardEndTurn->setEnabled(logicalModel.badSetGroups().isEmpty());
 }
 
 /*slot*/ void MainWindow::actionDrawCardEndTurn()
 {
-    if (!havePlayedCard && !haveDrawnCard)
+    if (!havePlayedCard() && !haveDrawnCard)
     {
         takeCardFromDrawPile();
         return;
@@ -504,19 +500,9 @@ void MainWindow::updateDrawCardEndTurnAction()
 
     baizeScene->blinkingCard()->stop();
 
-    for (const Card *card : cardDeck.initialFreeCards())
-    {
-        int inGroup = cardGroups.findCardInGroups(card);
-        if (inGroup >= 0 && cardGroups.at(inGroup).count() > 1)
-            cardDeck.removeFromInitialFreeCards(card);
-    }
+    logicalModel.endOfTurn();
 
-    if (++activePlayer >= totalPlayers)
-        activePlayer = 0;
-    havePlayedCard = haveDrawnCard = false;
-    updateDrawCardEndTurnAction();
-
-    serializationDoc = serializeToJson();
+    startTurn();
 
     showHands();
 }

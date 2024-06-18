@@ -4,11 +4,8 @@
 #include <QJsonDocument>
 #include <QMainWindow>
 #include <QPlainTextEdit>
-#include <QSet>
 
-#include "carddeck.h"
-#include "cardhand.h"
-#include "cardgroup.h"
+#include "logicalmodel.h"
 
 class BaizeScene;
 class BaizeView;
@@ -28,9 +25,14 @@ protected:
 private:
     bool fixHandsToView;
     bool autoEndTurn;
-    bool havePlayedCard, haveDrawnCard;
-    static constexpr int totalPlayers = 2;
-    int activePlayer;
+    bool haveDrawnCard;
+
+    LogicalModel logicalModel;
+    int &activePlayer = logicalModel.activePlayer;
+    CardDeck &cardDeck = logicalModel.cardDeck;
+    CardHands &hands = logicalModel.hands;
+    CardGroups &cardGroups = logicalModel.cardGroups;
+
     enum HandLayout { HandLayoutHorizontal, HandLayoutHorizontalGapBetweenSuits, HandLayoutFan };
     HandLayout handLayout;
     BaizeScene *baizeScene;
@@ -38,9 +40,6 @@ private:
     QMenu *mainMenu;
     QAction *menuActionDrawCardEndTurn;
     QString _appRootPath;
-    CardDeck cardDeck;
-    CardHands hands;
-    CardGroups cardGroups;
     QJsonDocument serializationDoc;
 
     struct HandCardLayoutInfo
@@ -65,18 +64,19 @@ private:
     void showHand(int player, bool enforceCorrectStacking = false);
     void hideHand(int player);
     void shuffleAndDeal();
-    void dealInitialFreeCards();
+    void showInitialFreeCards();
     void sortAndShow();
     int findCardInHandArea(const CardPixmapItem *item) const;
-    bool isInitialCardGroup(const CardGroup &group) const;
-    CardGroups badSetGroups() const;
     void tidyGroups();
+    bool havePlayedCard() const;
+    void startTurn();
     QJsonDocument serializeToJson() const;
     void deserializeFromJson(const QJsonDocument &doc);
 
 private slots:
     void baizeViewCoordinatesChanged();
-    void baizeSceneCardMoved(CardPixmapItem *item);
+    void baizeSceneSingleCardMoved(CardPixmapItem *item);
+    void baizeSceneMultipleCardsMoved(QList<CardPixmapItem *> items);
     void takeCardFromDrawPile();
     void actionHandLayout(HandLayout handLayout);
     void actionDeal();

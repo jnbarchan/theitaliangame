@@ -14,6 +14,7 @@ SOURCES += \
     carddeck.cpp \
     cardgroup.cpp \
     cardhand.cpp \
+    logicalmodel.cpp \
     main.cpp \
     mainwindow.cpp \
     card.cpp \
@@ -25,6 +26,7 @@ HEADERS += \
     carddeck.h \
     cardgroup.h \
     cardhand.h \
+    logicalmodel.h \
     mainwindow.h \
     card.h \
     cardimages.h
