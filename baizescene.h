@@ -85,7 +85,10 @@ public:
     CardPixmapItem *findItemForCard(const Card *card) const;
     const Card *findOtherCardForItemPosition(const CardPixmapItem *item) const;
     void removeAllCardGroupBoxes();
+    QSize cardsAsGroupSize(int cardCount);
     void layoutCardsAsGroup(QList<const Card *> cards, bool isBadSetGroup = false, bool isInitialCardGroup = false);
+    QList<QRectF> findFreeRectanglesToPlaceCards(int cardCount, QRectF placeInRect = QRectF());
+    void showFreeRectangles(const QList<QRectF> &freeRectangles);
     QJsonObject serializeToJson() const;
     void deserializeFromJson(const QJsonObject &obj, const CardDeck &cardDeck);
 
@@ -103,6 +106,8 @@ private:
     void createPlayerNameItem();
     void createDrawCardEndTurnButton();
     QRectF calcBoundingRect(const QList<CardPixmapItem *> &items);
+    QList<QGraphicsItem *> findContainingItems(const QGraphicsItem *item, const QList<QGraphicsItem *> items) const;
+    QList<QRectF> calcMaximalFreeRectangles();
 
 protected:
     virtual void drawBackground(QPainter *painter, const QRectF &rect) override;

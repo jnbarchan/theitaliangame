@@ -56,6 +56,8 @@ CardGroups LogicalModel::badSetGroups() const
 const Card *LogicalModel::takeCardFromDrawPile()
 {
     const Card *card = cardDeck.dealNextCard();
+    if (card == nullptr)
+        return nullptr;
     CardHand &hand(hands[activePlayer]);
     hand.append(card);
     hand.sortHand();

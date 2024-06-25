@@ -1,4 +1,5 @@
 #include <QDebug>
+#include <QScrollBar>
 #include <QWheelEvent>
 
 #include "baizeview.h"
@@ -6,6 +7,15 @@
 BaizeView::BaizeView()
 {
 
+}
+
+QRectF BaizeView::visibleSceneRect() const
+{
+    // return the area in scene coordinates of that part of the scene *visible* in the view
+    // from https://stackoverflow.com/a/78297499/489865
+    const QRect viewportRect(QPoint(horizontalScrollBar()->value(), verticalScrollBar()->value()), viewport()->size());
+    const auto mat = transform().inverted();
+    return mat.mapRect(viewportRect);
 }
 
 /*virtual*/ void BaizeView::resizeEvent(QResizeEvent *event) /*override*/

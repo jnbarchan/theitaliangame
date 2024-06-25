@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMessageBox>
 
 #include "baizescene.h"
 #include "baizeview.h"
@@ -30,7 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupUi();
 
     this->fixHandsToView = true;
-    this->autoEndTurn = true;
+    this->autoEndTurn = false;
 
     // signal connections
     connect(baizeView, &BaizeView::viewCoordinatesChanged, this, &MainWindow::baizeViewCoordinatesChanged);
@@ -38,10 +39,17 @@ MainWindow::MainWindow(QWidget *parent)
     connect(baizeScene, &BaizeScene::multipleCardsMoved, this, &MainWindow::baizeSceneMultipleCardsMoved);
     connect(baizeScene, &BaizeScene::drawPileDoubleClicked, this, &MainWindow::takeCardFromDrawPile);
 
+    connect(this, &MainWindow::aiModelMakeTurn, &aiModel, &AiModel::makeTurn);
+    connect(&aiModel, &AiModel::madeTurn, this, &MainWindow::aiModelMadeTurn);
+
     cardDeck.createCards();
 
     hands.totalHands = 2;
-    hands.initialHandCardCount = 13;
+    hands.aiPlayers = { true, false };
+    hands.initialHandCardCount = /*13;*/ 23 /*TEMPORARY*/;
+
+    this->aiModel.logicalModel = &this->logicalModel;
+
     actionDeal();
 }
 
@@ -242,7 +250,7 @@ void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
 
     QRectF handArea(handAreaRect(activePlayer));
     baizeScene->handAreaRectItem()->setRect(handArea);
-    baizeScene->playerNameItem()->setPlainText(QString("Player #%1").arg(activePlayer));
+    baizeScene->playerNameItem()->setPlainText(QString("%1 #%2").arg(hands.isAiPlayer(activePlayer) ? "AI" : "Human").arg(activePlayer));
     baizeScene->playerNameItem()->setPos(hcli.xPlayerNamePos, hcli.yPlayerNamePos);
     QToolButton *button = qobject_cast<QToolButton *>(baizeScene->drawCardEndTurnButton()->widget());
     button->setDefaultAction(menuActionDrawCardEndTurn);
@@ -257,8 +265,7 @@ void MainWindow::shuffleAndDeal()
 
 void MainWindow::showInitialFreeCards()
 {
-    Q_ASSERT(cardDeck.initialFreeCards().count() == 4);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < cardDeck.initialFreeCards().count(); i++)
     {
         const Card *card = cardDeck.initialFreeCards().at(i);
         baizeScene->addCard(card, -275 + i * 150, -300);
@@ -302,13 +309,96 @@ bool MainWindow::havePlayedCard() const
     return false;
 }
 
-void MainWindow::startTurn()
+void MainWindow::startTurn(bool restart /*= false*/)
 {
     haveDrawnCard = false;
-    logicalModel.startOfTurn();
-    serializationDoc = serializeToJson();
+    if (!restart)
+    {
+        logicalModel.startOfTurn();
+        serializationDoc = serializeToJson();
+    }
+    updateDrawCardEndTurnAction();
+
+    if (hands.isAiPlayer(activePlayer))
+        QTimer::singleShot(100, this, [this]() { emit aiModelMakeTurn(); });
+}
+
+QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
+{
+    // (try to) find free area for card group
+    QList<QRectF> freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count(), baizeView->visibleSceneRect());
+    if (freeRectangles.isEmpty())
+        freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count());
+    cardDeck.random_shuffle(freeRectangles.begin(), freeRectangles.end());
+    QPointF newGroupPoint = { -600, -300 };
+    if (!freeRectangles.isEmpty())
+    {
+        const QRectF &freeRect(freeRectangles.at(0));
+        QRectF cardsRect(QPointF(freeRect.topLeft()), baizeScene->cardsAsGroupSize(cardGroup.count()));
+        Q_ASSERT(freeRect.contains((cardsRect)));
+        cardsRect.moveCenter(freeRect.center());
+        Q_ASSERT(freeRect.contains((cardsRect)));
+        newGroupPoint = cardsRect.topLeft();
+    }
+    return newGroupPoint;
+}
+
+void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
+{
+    Q_ASSERT(hands.isAiPlayer(activePlayer));
+    CardHand &aiHand(aiModel.aiHand());
+    switch (turnMove.moveType)
+    {
+    case AiModelTurnMove::PlayCompleteSetFromHand:
+    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize: {
+        CardGroup cardGroup(turnMove.cardGroup);
+        Q_ASSERT(cardGroup.count() >= 3);
+        for (const Card *card : cardGroup)
+            if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
+                Q_ASSERT(aiHand.contains(card));
+            else
+                Q_ASSERT(aiHand.contains(card) || cardGroups.findCardInGroups(card) >= 0);
+        CardGroup::SetType setType;
+        bool isGoodSet = cardGroup.isGoodSet(setType);
+        Q_ASSERT(isGoodSet);
+        if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
+            qDebug() << "aiModelMakeMove:" << "PlayCompleteSetFromHand:" << cardGroup.toString();
+        else
+            qDebug() << "aiModelMakeMove:" << "PlayCompleteSetFromHandPlusBaize:" << cardGroup.toString();
+
+        // (try to) find free area for card group
+        QPointF newGroupPoint = findFreeAreaForCardGroup(cardGroup);
+
+        // moving from Hand to baize, new group
+        CardGroup newGroup;
+        cardGroups.append(newGroup);
+        while (!cardGroup.isEmpty())
+        {
+            const Card *card = cardGroup.takeFirst();
+            if (aiHand.contains(card))
+                aiHand.removeOne(card);
+            else
+            {
+                int wasInGroup = cardGroups.findCardInGroups(card);
+                Q_ASSERT(wasInGroup >= 0);
+                cardGroups[wasInGroup].removeOne(card);
+            }
+            cardGroups.last().append(card);
+            CardPixmapItem *item = baizeScene->findItemForCard(card);
+            Q_ASSERT(item);
+            item->setPos(newGroupPoint);
+        }
+    }
+        break;
+    default: Q_ASSERT(false);
+    }
+
+    // tidy up
+    showHand(activePlayer);
+    tidyGroups();
     updateDrawCardEndTurnAction();
 }
+
 
 QJsonDocument MainWindow::serializeToJson() const
 {
@@ -334,6 +424,7 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     cardGroups.deserializeFromJson(obj["cardGroups"].toArray(), cardDeck);
     baizeScene->deserializeFromJson(obj["scene"].toObject(), cardDeck);
 }
+
 
 /*slot*/ void MainWindow::baizeViewCoordinatesChanged()
 {
@@ -448,6 +539,8 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
         return;
 
     const Card *card = logicalModel.takeCardFromDrawPile();
+    if (card == nullptr)
+        return;
     showHand(activePlayer, true);
     baizeScene->blinkingCard()->start(card);
 
@@ -456,6 +549,21 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 
     if (autoEndTurn)
         QTimer::singleShot(2000, this, &MainWindow::actionDrawCardEndTurn);
+}
+
+/*slot*/ void MainWindow::aiModelMadeTurn(AiModelTurnMoves turnMoves)
+{
+    if (turnMoves.isEmpty())
+    {
+        qDebug() << "aiModelMadeTurn:" << "AI draws card";
+        takeCardFromDrawPile();
+    }
+    else
+    {
+        qDebug() << "aiModelMadeTurn:" << "AI makes moves, count:" << turnMoves.count();
+        for (const AiModelTurnMove &turnMove : turnMoves)
+            aiModelMakeMove(turnMove);
+    }
 }
 
 /*slot*/ void MainWindow::actionHandLayout(HandLayout handLayout)
@@ -477,10 +585,9 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 /*slot*/ void MainWindow::actionRestartTurn()
 {
     deserializeFromJson(serializationDoc);
-    haveDrawnCard = false;
-    updateDrawCardEndTurnAction();
     tidyGroups();
     showHands();
+    startTurn(true);
 }
 
 void MainWindow::updateDrawCardEndTurnAction()
@@ -501,8 +608,7 @@ void MainWindow::updateDrawCardEndTurnAction()
     baizeScene->blinkingCard()->stop();
 
     logicalModel.endOfTurn();
+    showHands();
 
     startTurn();
-
-    showHands();
 }

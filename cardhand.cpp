@@ -17,6 +17,7 @@ void CardHand::sortHand()
 CardHands::CardHands()
 {
     this->totalHands = 1;
+    this->aiPlayers = { false };
     this->initialHandCardCount = 13;
 }
 

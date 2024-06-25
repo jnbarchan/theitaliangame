@@ -1,5 +1,3 @@
-#include <random>
-
 #include <QJsonArray>
 
 #include "carddeck.h"
@@ -32,16 +30,29 @@ void CardDeck::createCards()
     resetForNewDeal();
 }
 
+/*static*/ std::mt19937 &CardDeck::random_generator()
+{
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    return gen;
+}
+
+int CardDeck::random_int(int range)
+{
+    std::uniform_int_distribution<> distr(0, range);
+    return distr(random_generator());
+}
+
 void CardDeck::shuffle()
 {
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(begin(), end(), g);
+    random_shuffle(begin(), end());
     resetForNewDeal();
 }
 
 const Card *CardDeck::dealNextCard()
 {
+    if (nextCardToBeDealt >= count())
+        return nullptr;
     return at(nextCardToBeDealt++);
 }
 

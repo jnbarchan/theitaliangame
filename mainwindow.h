@@ -6,6 +6,7 @@
 #include <QPlainTextEdit>
 
 #include "logicalmodel.h"
+#include "aimodel.h"
 
 class BaizeScene;
 class BaizeView;
@@ -32,6 +33,7 @@ private:
     CardDeck &cardDeck = logicalModel.cardDeck;
     CardHands &hands = logicalModel.hands;
     CardGroups &cardGroups = logicalModel.cardGroups;
+    AiModel aiModel;
 
     enum HandLayout { HandLayoutHorizontal, HandLayoutHorizontalGapBetweenSuits, HandLayoutFan };
     HandLayout handLayout;
@@ -69,7 +71,9 @@ private:
     int findCardInHandArea(const CardPixmapItem *item) const;
     void tidyGroups();
     bool havePlayedCard() const;
-    void startTurn();
+    void startTurn(bool restart = false);
+    QPointF findFreeAreaForCardGroup(const CardGroup &cardGroup) const;
+    void aiModelMakeMove(const AiModelTurnMove &turnMove);
     QJsonDocument serializeToJson() const;
     void deserializeFromJson(const QJsonDocument &doc);
 
@@ -78,11 +82,15 @@ private slots:
     void baizeSceneSingleCardMoved(CardPixmapItem *item);
     void baizeSceneMultipleCardsMoved(QList<CardPixmapItem *> items);
     void takeCardFromDrawPile();
+    void aiModelMadeTurn(AiModelTurnMoves turnMoves);
     void actionHandLayout(HandLayout handLayout);
     void actionDeal();
     void actionRestartTurn();
     void updateDrawCardEndTurnAction();
     void actionDrawCardEndTurn();
+
+signals:
+    void aiModelMakeTurn();
 };
 
 #endif

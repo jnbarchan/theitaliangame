@@ -10,6 +10,8 @@ class BaizeView : public QGraphicsView
 public:
     BaizeView();
 
+    QRectF visibleSceneRect() const;
+
 protected:
     virtual void resizeEvent(QResizeEvent *event) override;
     virtual void scrollContentsBy(int dx, int dy) override;

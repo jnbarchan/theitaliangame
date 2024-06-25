@@ -7,6 +7,18 @@ CardGroup::CardGroup()
 
 }
 
+QString CardGroup::toString() const
+{
+    QString str;
+    for (int i = 0; i < count(); i++)
+    {
+        if (i > 0)
+            str += ", ";
+        str += at(i)->toString();
+    }
+    return str;
+}
+
 int CardGroup::rankDifference(int rank0, int rank1) const
 {
     // return the difference in rank *from* rank1 *to* rank0, i.e. rank0 - rank1 (a la strcmp())
@@ -63,7 +75,7 @@ void CardGroup::rearrangeForSets()
     }
 }
 
-bool CardGroup::isGoodSet() const
+bool CardGroup::isGoodSet(SetType &setType) const
 {
     if (count() < 3)
         return false;
@@ -76,18 +88,26 @@ bool CardGroup::isGoodSet() const
                 return false;
             else
                 suits.insert(card->suit());
+        setType = RankSet;
         return true;
     }
     else if (at(1)->suit() == at(0)->suit())
     {
-        // check for sequential ranks in same suit
+        // check for sequential cards in same suit
         // (assumes ordered as per `rearrangeForSets`)
         for (int i = 1; i < count(); i++)
             if (at(i)->suit() != at(i - 1)->suit() || rankDifference(at(i)->rank(), at(i - 1)->rank()) != -1)
                 return false;
+        setType = RunSet;
         return true;
     }
     return false;
+}
+
+bool CardGroup::isGoodSet() const
+{
+   SetType setType;
+   return isGoodSet(setType);
 }
 
 
@@ -95,6 +115,18 @@ bool CardGroup::isGoodSet() const
 CardGroups::CardGroups()
 {
 
+}
+
+QString CardGroups::toString() const
+{
+    QString str;
+    for (int i = 0; i < count(); i++)
+    {
+        if (i > 0)
+            str += ", ";
+        str += QString("[%1]").arg(at(i).toString());
+    }
+    return str;
 }
 
 void CardGroups::clearGroups()

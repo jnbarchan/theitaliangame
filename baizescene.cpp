@@ -70,7 +70,7 @@ void CardGroupBoxItem::setShowAs(ShowAs showAs)
     switch (_showAs)
     {
     case ShowAsBadSet: pen.setColor(Qt::red); break;
-    case ShowAsGoodSet: pen.setColor(Qt::transparent); break;
+    case ShowAsGoodSet: pen.setColor(/*Qt::transparent*/Qt::cyan/*TEMPORARY*/); break;
     case ShowAsInitialCardGroup: pen.setColor(Qt::yellow); break;
     }
     pen.setWidth(4);
@@ -83,6 +83,7 @@ CardBlinker::CardBlinker(BaizeScene *baizeScene) :
     QObject(baizeScene)
 {
     this->_baizeScene = baizeScene;
+    this->card = nullptr;
 }
 
 void CardBlinker::start(const Card *card)
@@ -180,7 +181,7 @@ void BaizeScene::createHandAreaRectItem()
 
 void BaizeScene::createPlayerNameItem()
 {
-    this->_playerNameItem = addText("");
+    this->_playerNameItem = addText("jhajgasdjg");
     QFont font(_playerNameItem->font());
     font.setPixelSize(30);
     _playerNameItem->setFont(font);
@@ -272,7 +273,10 @@ void BaizeScene::removeAllCardGroupBoxes()
     {
        CardGroupBoxItem *boxItem = dynamic_cast<CardGroupBoxItem *>(items[i]);
        if (boxItem)
-           removeItem(items[i]);
+       {
+           removeItem(boxItem);
+           delete boxItem;
+       }
     }
 }
 
@@ -282,6 +286,15 @@ QRectF BaizeScene::calcBoundingRect(const QList<CardPixmapItem *> &items)
     for (const CardPixmapItem *item : items)
         rect = rect.united(item->mapToScene(item->boundingRect()).boundingRect());
     return rect;
+}
+
+QSize BaizeScene::cardsAsGroupSize(int cardCount)
+{
+    const QPixmap pixmap(cardPixmap(0));
+    const int xBetweenItems = 25;
+    int width = pixmap.width() + (cardCount - 1) * xBetweenItems;
+    QSize cardsSize{width, pixmap.height()};
+    return cardsSize;
 }
 
 void BaizeScene::layoutCardsAsGroup(QList<const Card *> cards, bool isBadSetGroup /*= false*/, bool isInitialCardGroup /*= false*/)
@@ -312,19 +325,124 @@ void BaizeScene::layoutCardsAsGroup(QList<const Card *> cards, bool isBadSetGrou
     for (int i = items.count() - 2; i >= 0; i--)
         items[i]->stackBefore(items[i + 1]);
 
-    if (isBadSetGroup)
+    QRectF rect(calcBoundingRect(items));
+    if (!rect.isNull())
     {
-        QRectF rect(calcBoundingRect(items));
-        if (!rect.isNull())
-        {
-            CardGroupBoxItem *boxItem = new CardGroupBoxItem(isInitialCardGroup ? CardGroupBoxItem::ShowAsInitialCardGroup : CardGroupBoxItem::ShowAsBadSet);
-            rect.adjust(-2.0, -2.0, 4.0, 4.0);
-            boxItem->setRect(rect);
-            addItem(boxItem);
-            boxItem->stackBefore(items[0]);
-        }
+        CardGroupBoxItem::ShowAs showAs = CardGroupBoxItem::ShowAsGoodSet;
+        if (isBadSetGroup)
+            showAs = isInitialCardGroup ? CardGroupBoxItem::ShowAsInitialCardGroup : CardGroupBoxItem::ShowAsBadSet;
+        CardGroupBoxItem *boxItem = new CardGroupBoxItem(showAs);
+        rect.adjust(-2.0, -2.0, 4.0, 4.0);
+        boxItem->setRect(rect);
+        addItem(boxItem);
+        boxItem->stackBefore(items[0]);
     }
 }
+
+
+QList<QGraphicsItem *> BaizeScene::findContainingItems(const QGraphicsItem *item, const QList<QGraphicsItem *> items) const
+{
+    // find all items in `items` which fully contain `item`
+    const QRectF &boundingRect(item->mapToScene(item->boundingRect()).boundingRect());
+    QList<QGraphicsItem *> containingItems;
+    for (QGraphicsItem *containingItem : items)
+    {
+        const QRectF &containingBoundingRect(containingItem->mapToScene(containingItem->boundingRect()).boundingRect());
+        if (containingItem != item && containingBoundingRect.contains(boundingRect))
+            containingItems.append(containingItem);
+    }
+    return containingItems;
+}
+
+QList<QRectF> BaizeScene::calcMaximalFreeRectangles()
+{
+    // calculate the list of maximal free rectangular areas
+    // used to decide where to place a new card group for the AI
+    // algorithm taken from https://forum.qt.io/post/803192
+
+    QList<QGraphicsItem *> items(this->items());
+
+    // Remove items enclosed in other items (e.g. CardPixmapItems, allow it to use the enclosing group boxes/hand area)
+    for (int i = items.count() - 1; i >= 0; i--)
+        if (!findContainingItems(items.at(i), items).isEmpty())
+            items.removeAt(i);
+
+    // Generate vertical and horizontal sweep lines
+    QVector<qreal> verticalLines = { sceneRect().left(), sceneRect().right() };
+    QVector<qreal> horizontalLines = { sceneRect().top(), sceneRect().bottom() };
+    for (const QGraphicsItem *item : items)
+    {
+        const QRectF &rect(item->mapToScene(item->boundingRect()).boundingRect());
+        verticalLines.append(rect.left());
+        verticalLines.append(rect.right());
+        horizontalLines.append(rect.top());
+        horizontalLines.append(rect.bottom());
+    }
+
+    // Sort lines lists and make unique
+    std::sort(verticalLines.begin(), verticalLines.end());
+    verticalLines.erase(std::unique(verticalLines.begin(), verticalLines.end()), verticalLines.end());
+    std::sort(horizontalLines.begin(), horizontalLines.end());
+    horizontalLines.erase(std::unique(horizontalLines.begin(), horizontalLines.end()), horizontalLines.end());
+
+    // calculate list of all free rectangles
+    QList<QRectF> freeRectangles;
+    for (int i = 0; i < horizontalLines.count() - 1; i++)
+        for (int j = 0; j < verticalLines.count() - 1; j++)
+        {
+            QRectF candidateRect = QRectF(QPointF(verticalLines.at(j), horizontalLines.at(i)), QPointF(verticalLines.at(j + 1), horizontalLines.at(i + 1)));
+            bool intersects = false;
+            for (const QGraphicsItem *item : items)
+            {
+                const QRectF &rect(item->mapToScene(item->boundingRect()).boundingRect());
+                if (rect.intersects(candidateRect))
+                    intersects = true;
+            }
+            if (!intersects)
+                freeRectangles.append(candidateRect);
+        }
+
+    // amalgamate touching free rectangles horizontally
+    std::sort(freeRectangles.begin(), freeRectangles.end(),
+              [](const QRectF &r0, const QRectF &r1) { return qFuzzyCompare(r0.y(), r1.y()) ? r0.x() < r1.x() : r0.y() < r1.y(); } );
+    for (int i = freeRectangles.count() - 1; i > 0; i--)
+        if (freeRectangles.at(i - 1).topRight() == freeRectangles.at(i).topLeft() && freeRectangles.at(i - 1).bottomRight() == freeRectangles.at(i).bottomLeft())
+        {
+            freeRectangles[i - 1] = freeRectangles[i - 1].united(freeRectangles[i]);
+            freeRectangles.removeAt(i);
+        }
+
+    return freeRectangles;
+}
+
+QList<QRectF> BaizeScene::findFreeRectanglesToPlaceCards(int cardCount, QRectF placeInRect /*= QRectF()*/)
+{
+    if (placeInRect.isEmpty())
+        placeInRect = sceneRect();
+
+    QSize cardsSize(cardsAsGroupSize(cardCount));
+
+    QList<QRectF> result;
+    QList<QRectF> freeRectangles = calcMaximalFreeRectangles();
+    for (const QRectF &rect : freeRectangles)
+    {
+        QRectF rect2 = rect.intersected(placeInRect);
+        if (rect2.width() >= cardsSize.width() && rect2.height() >= cardsSize.height())
+            result.append(rect2);
+    }
+
+    return result;
+}
+
+void BaizeScene::showFreeRectangles(const QList<QRectF> &freeRectangles)
+{
+    qDebug() << "showFreeRectangles count:" << freeRectangles.count();
+    QGraphicsRectItem *background = this->addRect(this->sceneRect(), QPen(), QBrush(Qt::yellow));
+    background->setZValue(-1000);
+    for (const QRectF &rect : freeRectangles)
+        this->addRect(rect, QPen(), QBrush(Qt::cyan))->setZValue(-500);
+}
+
 
 QJsonObject BaizeScene::serializeToJson() const
 {
@@ -436,7 +554,8 @@ void BaizeScene::deserializeFromJson(const QJsonObject &obj, const CardDeck &car
                 if ((cardItem = dynamic_cast<CardPixmapItem *>(item)))
                     cardItems.append(cardItem);
             clearSelection();
-            emit multipleCardsMoved(cardItems);
+            if (!cardItems.isEmpty())
+                emit multipleCardsMoved(cardItems);
         }
     }
 

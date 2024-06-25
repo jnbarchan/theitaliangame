@@ -23,8 +23,10 @@ class CardHands : public QList<CardHand>
 public:
     CardHands();
     int totalHands;
+    QList<bool> aiPlayers;
     int initialHandCardCount;
 
+    bool isAiPlayer(int player) const { return (player >= 0 && player < totalHands && player < aiPlayers.count()) ? aiPlayers.at(player) : false; }
     void clearHands();
     void dealHands(CardDeck &cardDeck);
     void sortHands();

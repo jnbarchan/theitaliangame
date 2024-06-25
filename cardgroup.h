@@ -12,11 +12,12 @@ class CardGroup : public QList<const Card *>
 public:
     CardGroup();
 
-    void rearrangeForSets();
-    bool isGoodSet() const;
-
-private:
+    enum SetType { RankSet, RunSet };
+    QString toString() const;
     int rankDifference(int rank0, int rank1) const;
+    void rearrangeForSets();
+    bool isGoodSet(SetType &setType) const;
+    bool isGoodSet() const;
 };
 
 
@@ -26,6 +27,7 @@ class CardGroups : public QList<CardGroup>
 public:
     CardGroups();
 
+    QString toString() const;
     void clearGroups();
     int findCardInGroups(const Card *card) const;
     void removeEmptyGroups();
