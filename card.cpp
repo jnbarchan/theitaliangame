@@ -3,6 +3,9 @@
 Card::Card(int id)
 {
     this->id = id;
+#ifdef QT_DEBUG
+    this->_debugStr = toString();
+#endif
 }
 
 QString Card::toString() const

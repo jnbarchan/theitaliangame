@@ -46,7 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     hands.totalHands = 2;
     hands.aiPlayers = { true, false };
-    hands.initialHandCardCount = /*13;*/ 23 /*TEMPORARY*/;
+    hands.initialHandCardCount = 13;
 
     this->aiModel.logicalModel = &this->logicalModel;
 
@@ -347,11 +347,13 @@ void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
 {
     Q_ASSERT(hands.isAiPlayer(activePlayer));
     CardHand &aiHand(aiModel.aiHand());
+    CardGroup cardGroup(turnMove.cardGroup);
+
     switch (turnMove.moveType)
     {
     case AiModelTurnMove::PlayCompleteSetFromHand:
-    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize: {
-        CardGroup cardGroup(turnMove.cardGroup);
+    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize:
+    case AiModelTurnMove::PlayAddToCompleteSetOnBaizeFromHand: {
         Q_ASSERT(cardGroup.count() >= 3);
         for (const Card *card : cardGroup)
             if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
@@ -361,6 +363,16 @@ void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
         CardGroup::SetType setType;
         bool isGoodSet = cardGroup.isGoodSet(setType);
         Q_ASSERT(isGoodSet);
+    }
+        break;
+    default: break;
+    }
+
+
+    switch (turnMove.moveType)
+    {
+    case AiModelTurnMove::PlayCompleteSetFromHand:
+    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize: {
         if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
             qDebug() << "aiModelMakeMove:" << "PlayCompleteSetFromHand:" << cardGroup.toString();
         else
@@ -372,9 +384,8 @@ void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
         // moving from Hand to baize, new group
         CardGroup newGroup;
         cardGroups.append(newGroup);
-        while (!cardGroup.isEmpty())
+        for (const Card *card : cardGroup)
         {
-            const Card *card = cardGroup.takeFirst();
             if (aiHand.contains(card))
                 aiHand.removeOne(card);
             else
@@ -390,6 +401,37 @@ void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
         }
     }
         break;
+
+    case AiModelTurnMove::PlayAddToCompleteSetOnBaizeFromHand: {
+        qDebug() << "aiModelMakeMove:" << "PlayAddToCompleteSetOnBaizeFromHand:" << cardGroup.toString();
+        // moving from Hand to baize, existing group
+        int existingGroup = -1;
+        for (const Card *card : cardGroup)
+        {
+            int isInGoup = cardGroups.findCardInGroups(card);
+            if (isInGoup < 0)
+                Q_ASSERT(aiHand.contains(card));
+            else if (existingGroup < 0)
+                existingGroup = isInGoup;
+            else
+                Q_ASSERT(isInGoup == existingGroup);
+        }
+        Q_ASSERT(existingGroup >= 0);
+        const Card *existingGroupCard = cardGroups.at(existingGroup).at(0);
+        const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
+        Q_ASSERT(existingGroupItem);
+        for (const Card *card : cardGroup)
+            if (aiHand.contains(card))
+            {
+                aiHand.removeOne(card);
+                cardGroups[existingGroup].append(card);
+                CardPixmapItem *item = baizeScene->findItemForCard(card);
+                Q_ASSERT(item);
+                item->setPos(existingGroupItem->pos());
+            }
+    }
+        break;
+
     default: Q_ASSERT(false);
     }
 
@@ -431,6 +473,8 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     if (!fixHandsToView)
         return;
     showHands();
+    // not sure why, but invalidating the background is needed to prevent "artifacts" being left when scrolling via the scrollbar button
+    baizeScene->invalidate(baizeScene->sceneRect(), QGraphicsScene::BackgroundLayer);
 }
 
 /*slot*/ void MainWindow::baizeSceneSingleCardMoved(CardPixmapItem *item)

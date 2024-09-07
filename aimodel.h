@@ -8,7 +8,7 @@
 class AiModelTurnMove
 {
 public:
-    enum MoveType { PlayCompleteSetFromHand, PlayCompleteSetFromHandPlusBaize, };
+    enum MoveType { PlayCompleteSetFromHand, PlayCompleteSetFromHandPlusBaize, PlayAddToCompleteSetOnBaizeFromHand, };
     MoveType moveType;
     CardGroup cardGroup;
 };
@@ -49,8 +49,12 @@ private:
     CardGroups completeAllPartialRunSetsFrom1CardOnBaize(const CardGroups &runPartialSets) const;
     CardGroups findAllCompleteRankSetsFrom2CardsInHand() const;
     CardGroups findAllCompleteRunSetsFrom2CardsInHand() const;
+    CardGroups findAllAddToSetsFrom1CardInHand() const;
     CardGroups findAllCompleteSetsInHand() const;
     CardGroups findAllCompleteSetsFrom2CardsInHand() const;
+    CardGroups findAllCompleteSetsFrom1CardInHand() const;
+    CardGroups findAllAddToRankSetsFrom1CardInHand() const;
+    CardGroups findAllAddToRunSetsFrom1CardInHand() const;
 
 public slots:
     void makeTurn();

@@ -19,6 +19,11 @@ public:
 
 public:
     int id;
+
+private:
+#ifdef QT_DEBUG
+    QString _debugStr;
+#endif
 };
 
 #endif // CARD_H

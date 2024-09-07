@@ -181,7 +181,7 @@ void BaizeScene::createHandAreaRectItem()
 
 void BaizeScene::createPlayerNameItem()
 {
-    this->_playerNameItem = addText("jhajgasdjg");
+    this->_playerNameItem = addText("Player");
     QFont font(_playerNameItem->font());
     font.setPixelSize(30);
     _playerNameItem->setFont(font);
