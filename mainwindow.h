@@ -7,10 +7,8 @@
 
 #include "logicalmodel.h"
 #include "aimodel.h"
-
-class BaizeScene;
-class BaizeView;
-class CardPixmapItem;
+#include "baizescene.h"
+#include "baizeview.h"
 
 class MainWindow : public QMainWindow
 {

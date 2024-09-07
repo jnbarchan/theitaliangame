@@ -1,3 +1,4 @@
+#include <QActionGroup>
 #include <QApplication>
 #include <QBoxLayout>
 #include <QDebug>
@@ -10,8 +11,6 @@
 #include <QMenuBar>
 #include <QMessageBox>
 
-#include "baizescene.h"
-#include "baizeview.h"
 #include "mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent)
@@ -71,11 +70,11 @@ const QString &MainWindow::appRootPath()
     {
         // look relative to where the *executable* directory is
         // if that is the right directory return that (i.e. application has been deployed)
-        // if not assume it is the development "build" directory and return "../<applicationName>" from there
+        // if not assume it is the development "build" directory and return "../.." from there
         QDir dir(QCoreApplication::applicationDirPath());
         if (dir.exists("images"))
             _appRootPath = dir.absolutePath();
-        else if (dir.cd("../" + QCoreApplication::applicationName()))
+        else if (dir.cd("../.."))
             if (dir.exists("images"))
                 _appRootPath = dir.absolutePath();
     }
