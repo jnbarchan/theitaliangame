@@ -11,6 +11,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 
+#include "baizescene.h"
+#include "baizeview.h"
+
 #include "mainwindow.h"
 
 MainWindow::MainWindow(QWidget *parent)
@@ -222,7 +225,7 @@ void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
             if (item)
                 item->setPos(xPos, yPos);
             else
-                item = baizeScene->addCard(card, xPos, yPos);
+                baizeScene->addCard(card, xPos, yPos);
             xPos += hcli.xBetweenCards;
             break;
         case HandLayoutHorizontalGapBetweenSuits:
@@ -231,7 +234,7 @@ void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
             if (item)
                 item->setPos(xPos, yPos);
             else
-                item = baizeScene->addCard(card, xPos, yPos);
+                baizeScene->addCard(card, xPos, yPos);
             xPos += hcli.xBetweenCards;
             break;
         case HandLayoutFan: {
@@ -440,7 +443,6 @@ void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
     updateDrawCardEndTurnAction();
 }
 
-
 QJsonDocument MainWindow::serializeToJson() const
 {
     QJsonObject obj;
@@ -465,7 +467,6 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     cardGroups.deserializeFromJson(obj["cardGroups"].toArray(), cardDeck);
     baizeScene->deserializeFromJson(obj["scene"].toObject(), cardDeck);
 }
-
 
 /*slot*/ void MainWindow::baizeViewCoordinatesChanged()
 {
