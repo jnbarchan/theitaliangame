@@ -12,30 +12,37 @@ CardHand &AiModel::aiHand() const
     return hands[activePlayer()];
 }
 
+QList<const Card *> AiModel::freeCardsInGroup(const CardGroup &group) const
+{
+    QList<const Card *> freeCards;
+    if (logicalModel->isInitialCardGroup(group))
+        freeCards.append(group);
+    else
+    {
+        CardGroup::SetType setType;
+        bool isGoodSet = group.isGoodSet(setType);
+        Q_ASSERT(isGoodSet);
+        if (group.count() > 3)
+        {
+            if (setType == CardGroup::RankSet)
+            {
+                freeCards.append(group);
+            }
+            else if (setType == CardGroup::RunSet)
+            {
+                freeCards.append(group.at(0));
+                freeCards.append(group.at(group.count() - 1));
+            }
+        }
+    }
+    return freeCards;
+}
 
 QList<const Card *> AiModel::findAllFreeCardsOnBaize() const
 {
     QList<const Card *> freeCards;
-    freeCards.append(cardDeck().initialFreeCards());
     for (const CardGroup &group : cardGroups())
-    {
-        if (logicalModel->isInitialCardGroup(group))
-            continue;
-        CardGroup::SetType setType;
-        bool isGoodSet = group.isGoodSet(setType);
-        Q_ASSERT(isGoodSet);
-        if (group.count() < 4)
-            continue;
-        if (setType == CardGroup::RankSet)
-        {
-            freeCards.append(group);
-        }
-        else if (setType == CardGroup::RunSet)
-        {
-            freeCards.append(group.at(0));
-            freeCards.append(group.at(group.count() - 1));
-        }
-    }
+        freeCards.append(freeCardsInGroup(group));
     return freeCards;
 }
 
@@ -210,8 +217,7 @@ CardGroups AiModel::completeAllPartialRankSetsFrom1CardOnBaize(const CardGroups 
         for (const Card *freeCard : freeCards)
             if (freeCard->rank() == partialSet.at(0)->rank())
             {
-                CardGroup rankSet;
-                rankSet.append(partialSet);
+                CardGroup rankSet(partialSet);
                 rankSet.append(freeCard);
                 if (rankSet.isGoodSet())
                 {
@@ -241,8 +247,7 @@ CardGroups AiModel::completeAllPartialRunSetsFrom1CardOnBaize(const CardGroups &
         for (const Card *freeCard : freeCards)
             if (freeCard->suit() == partialSet.at(0)->suit())
             {
-                CardGroup runSet;
-                runSet.append(partialSet);
+                CardGroup runSet(partialSet);
                 runSet.append(freeCard);
                 runSet.rearrangeForSets();
                 if (runSet.isGoodSet())
@@ -284,7 +289,7 @@ CardGroups AiModel::findAllAddToSetsFrom1CardInHand() const
                 continue;
             if (existingSet.at(0)->rank() != card->rank() && existingSet.at(0)->suit() != card->suit())
                 continue;
-            CardGroup newSet = existingSet;
+            CardGroup newSet(existingSet);
             newSet.append(card);
             newSet.rearrangeForSets();
             if (newSet.isGoodSet())
@@ -295,6 +300,73 @@ CardGroups AiModel::findAllAddToSetsFrom1CardInHand() const
         }
     }
     return addToSets;
+}
+
+
+CardGroups AiModel::findAllMakeNewSetsFrom1CardInHand() const
+{
+    CardGroups newSets;
+    CardHand hand(aiHand());
+    while (!hand.isEmpty())
+    {
+        const Card *card0 = hand.takeFirst();
+        for (const CardGroup &existingSet1 : cardGroups())
+        {
+            if (existingSet1.count() < 4)
+                continue;
+            CardGroup::SetType setType;
+            bool isGoodSet = existingSet1.isGoodSet(setType);
+
+            if (existingSet1.count() >= 5)
+            {
+                Q_ASSERT(isGoodSet);
+                Q_ASSERT(setType == CardGroup::RunSet);
+                if (existingSet1.at(0)->suit() == card0->suit())
+                {
+                    CardGroup newSet = {card0, existingSet1.at(0), existingSet1.at(1)};
+                    newSet.rearrangeForSets();
+                    if (newSet.isGoodSet())
+                    {
+                        qDebug() << "findAllMakeNewSetsFrom1CardInHand:" << newSet.toString();
+                        newSets.append(newSet);
+                    }
+                    newSet = {card0, existingSet1.at(existingSet1.count() - 1), existingSet1.at(existingSet1.count() - 2)};
+                    newSet.rearrangeForSets();
+                    if (newSet.isGoodSet())
+                    {
+                        qDebug() << "findAllMakeNewSetsFrom1CardInHand:" << newSet.toString();
+                        newSets.append(newSet);
+                    }
+                }
+            }
+
+            QList<const Card *> freeCards1(freeCardsInGroup(existingSet1));
+            for (const Card *card1 : freeCards1)
+            {
+                if (card1->rank() != card0->rank() && card1->suit() != card0->suit())
+                    continue;
+                for (const CardGroup &existingSet2 : cardGroups())
+                {
+                    if (existingSet2 == existingSet1)
+                        continue;
+                    QList<const Card *> freeCards2(freeCardsInGroup(existingSet2));
+                    for (const Card *card2 : freeCards2)
+                    {
+                        if (card2->rank() != card0->rank() && card2->suit() != card0->suit())
+                            continue;
+                        CardGroup newSet = {card0, card1, card2};
+                        newSet.rearrangeForSets();
+                        if (newSet.isGoodSet())
+                        {
+                            qDebug() << "findAllMakeNewSetsFrom1CardInHand:" << newSet.toString();
+                            newSets.append(newSet);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return newSets;
 }
 
 
@@ -320,11 +392,20 @@ CardGroups AiModel::findAllCompleteSetsFrom2CardsInHand() const
     return completeSets;
 }
 
-CardGroups AiModel::findAllCompleteSetsFrom1CardInHand() const
+CardGroups AiModel::findAllAddToCompleteSetsFrom1CardInHand() const
 {
     CardGroups completeSets;
     CardGroups addToSets = findAllAddToSetsFrom1CardInHand();
     completeSets.append(addToSets);
+    qDebug() << "findAllAddToCompleteSetsFrom1CardInHand:" << "Complete sets count:" << completeSets.count();
+    return completeSets;
+}
+
+CardGroups AiModel::findAllCompleteSetsFrom1CardInHand() const
+{
+    CardGroups completeSets;
+    CardGroups newSets = findAllMakeNewSetsFrom1CardInHand();
+    completeSets.append(newSets);
     qDebug() << "findAllCompleteSetsFrom1CardInHand:" << "Complete sets count:" << completeSets.count();
     return completeSets;
 }
@@ -337,6 +418,8 @@ CardGroups AiModel::findAllCompleteSetsFrom1CardInHand() const
     AiModelTurnMoves turnMoves;
 
     CardGroups completeSets;
+
+    // find all 3+ complete sets in hand, nothing from baize
     completeSets = findAllCompleteSetsInHand();
     if (completeSets.count() > 0)
     {
@@ -348,6 +431,7 @@ CardGroups AiModel::findAllCompleteSetsFrom1CardInHand() const
         return;
     }
 
+    // find all 2+ partial sets in hand which can be completed from 1 free card on baize
     completeSets = findAllCompleteSetsFrom2CardsInHand();
     if (completeSets.count() > 0)
     {
@@ -359,11 +443,24 @@ CardGroups AiModel::findAllCompleteSetsFrom1CardInHand() const
         return;
     }
 
-    completeSets = findAllCompleteSetsFrom1CardInHand();
+    // find all 1 card in hand which can be added to existing sets on baize
+    completeSets = findAllAddToCompleteSetsFrom1CardInHand();
     if (completeSets.count() > 0)
     {
         AiModelTurnMove turnMove;
         turnMove.moveType = AiModelTurnMove::PlayAddToCompleteSetOnBaizeFromHand;
+        turnMove.cardGroup = completeSets.at(cardDeck().random_int(completeSets.count() - 1));
+        turnMoves.append(turnMove);
+        emit madeTurn(turnMoves);
+        return;
+    }
+
+    // find all 1 card in hand which can be completed from 2 free cards on baize
+    completeSets = findAllCompleteSetsFrom1CardInHand();
+    if (completeSets.count() > 0)
+    {
+        AiModelTurnMove turnMove;
+        turnMove.moveType = AiModelTurnMove::PlayCompleteSetFromHandPlusBaize;
         turnMove.cardGroup = completeSets.at(cardDeck().random_int(completeSets.count() - 1));
         turnMoves.append(turnMove);
         emit madeTurn(turnMoves);

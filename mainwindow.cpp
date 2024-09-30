@@ -10,9 +10,11 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QSaveFile>
 
 #include "baizescene.h"
 #include "baizeview.h"
+#include "qglobal.h"
 
 #include "mainwindow.h"
 
@@ -80,8 +82,14 @@ const QString &MainWindow::appRootPath()
         else if (dir.cd("../.."))
             if (dir.exists("images"))
                 _appRootPath = dir.absolutePath();
+        Q_ASSERT(!_appRootPath.isEmpty());
     }
     return _appRootPath;
+}
+
+const QString MainWindow::appSavesPath()
+{
+    return appRootPath() + "/saves";
 }
 
 void MainWindow::setupUi()
@@ -92,7 +100,7 @@ void MainWindow::setupUi()
     setCentralWidget(widget);
 
     // create the menus
-    this->mainMenu = new QMenu("Menu", this);
+    this->mainMenu = new QMenu("File", this);
     menuBar()->addMenu(mainMenu);
     QList<QAction *> actions;
 
@@ -113,6 +121,9 @@ void MainWindow::setupUi()
     mainMenu->addMenu(handLayoutSubmenu);
     mainMenu->addSeparator();
 
+    mainMenu->addAction("Open File...", this, &MainWindow::actionLoadFile);
+    mainMenu->addAction("Save File...", this, &MainWindow::actionSaveFile);
+    mainMenu->addSeparator();
     mainMenu->addAction("Restart Turn", this, &MainWindow::actionRestartTurn);
     this->menuActionDrawCardEndTurn = mainMenu->addAction("Draw Card/End Turn", this, &MainWindow::actionDrawCardEndTurn);
     mainMenu->addSeparator();
@@ -316,13 +327,28 @@ void MainWindow::startTurn(bool restart /*= false*/)
     haveDrawnCard = false;
     if (!restart)
     {
-        logicalModel.startOfTurn();
         serializationDoc = serializeToJson();
+        logicalModel.startOfTurn();
+        autosave();
     }
     updateDrawCardEndTurnAction();
 
     if (hands.isAiPlayer(activePlayer))
         QTimer::singleShot(100, this, [this]() { emit aiModelMakeTurn(); });
+}
+
+void MainWindow::autosave()
+{
+    Q_ASSERT(!serializationDoc.isEmpty());
+    const QString newPath = appSavesPath() + "/autosave.sav", backupPath = appSavesPath() + "/autosave.prev.sav";
+    QFile::remove(backupPath);
+    QFile::rename(newPath, backupPath);
+    QSaveFile file(newPath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        file.write(serializationDoc.toJson());
+        file.commit();
+    }
 }
 
 QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
@@ -616,14 +642,38 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     showHands();
 }
 
-/*slot*/ void MainWindow::actionDeal()
+/*slot*/ void MainWindow::actionLoadFile()
 {
-    shuffleAndDeal();
-    showInitialFreeCards();
-    this->activePlayer = 0;
-    sortAndShow();
+    QString filePath = QFileDialog::getOpenFileName(this, "Open", appSavesPath(), "*.sav");
+    if (filePath.isEmpty())
+        return;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, "Error", QString("%1: %2").arg(filePath).arg(file.errorString()));
+        return;
+    }
+    QByteArray jsonText = file.readAll();
+    serializationDoc = QJsonDocument::fromJson(jsonText);
+    actionRestartTurn();
+}
 
-    startTurn();
+/*slot*/ void MainWindow::actionSaveFile()
+{
+    Q_ASSERT(!serializationDoc.isEmpty());
+    QString filePath = QFileDialog::getSaveFileName(this, "Save As", appSavesPath(), "*.sav");
+    if (filePath.isEmpty())
+        return;
+    if (!filePath.endsWith(".sav"))
+        filePath += ".sav";
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(this, "Error", QString("%1: %2").arg(filePath).arg(file.errorString()));
+        return;
+    }
+    file.write(serializationDoc.toJson());
+    file.commit();
 }
 
 /*slot*/ void MainWindow::actionRestartTurn()
@@ -632,6 +682,16 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     tidyGroups();
     showHands();
     startTurn(true);
+}
+
+/*slot*/ void MainWindow::actionDeal()
+{
+    shuffleAndDeal();
+    showInitialFreeCards();
+    this->activePlayer = 0;
+    sortAndShow();
+
+    startTurn();
 }
 
 void MainWindow::updateDrawCardEndTurnAction()

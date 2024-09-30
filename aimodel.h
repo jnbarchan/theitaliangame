@@ -37,6 +37,7 @@ private:
     CardDeck &cardDeck() const { return logicalModel->cardDeck; }
     CardHands &hands() const { return logicalModel->hands; }
     CardGroups &cardGroups() const { return logicalModel->cardGroups; }
+    QList<const Card *> freeCardsInGroup(const CardGroup &group) const;
     QList<const Card *> findAllFreeCardsOnBaize() const;
     void removeFirstCardRankSet(CardHand &hand, CardGroup &rankSet) const;
     void removeFirstCardRunSet(CardHand &hand, CardGroup &runSet) const;
@@ -52,9 +53,11 @@ private:
     CardGroups findAllAddToSetsFrom1CardInHand() const;
     CardGroups findAllCompleteSetsInHand() const;
     CardGroups findAllCompleteSetsFrom2CardsInHand() const;
-    CardGroups findAllCompleteSetsFrom1CardInHand() const;
+    CardGroups findAllAddToCompleteSetsFrom1CardInHand() const;
     CardGroups findAllAddToRankSetsFrom1CardInHand() const;
     CardGroups findAllAddToRunSetsFrom1CardInHand() const;
+    CardGroups findAllCompleteSetsFrom1CardInHand() const;
+    CardGroups findAllMakeNewSetsFrom1CardInHand() const;
 
 public slots:
     void makeTurn();

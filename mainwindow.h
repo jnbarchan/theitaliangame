@@ -57,6 +57,7 @@ private:
     };
 
     const QString &appRootPath();
+    const QString appSavesPath();
     void setupUi();
     void clearHands();
     void sortHands();
@@ -73,6 +74,7 @@ private:
     void tidyGroups();
     bool havePlayedCard() const;
     void startTurn(bool restart = false);
+    void autosave();
     QPointF findFreeAreaForCardGroup(const CardGroup &cardGroup) const;
     void aiModelMakeMove(const AiModelTurnMove &turnMove);
     QJsonDocument serializeToJson() const;
@@ -85,8 +87,10 @@ private slots:
     void takeCardFromDrawPile();
     void aiModelMadeTurn(AiModelTurnMoves turnMoves);
     void actionHandLayout(HandLayout handLayout);
-    void actionDeal();
+    void actionLoadFile();
+    void actionSaveFile();
     void actionRestartTurn();
+    void actionDeal();
     void updateDrawCardEndTurnAction();
     void actionDrawCardEndTurn();
 

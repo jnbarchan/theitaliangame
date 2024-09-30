@@ -12,9 +12,11 @@ CardImages::CardImages(const QString &dirPath)
     {
         QString filePath = dirPath + "/" + QString("%1").arg(i, 2, 10, QChar('0')) + ".png";
         images[i].load(filePath);
+        Q_ASSERT(!images[i].isNull());
     }
     QString filePath = dirPath + "/../" + "cardback" + ".png";
     backImage.load(filePath);
+    Q_ASSERT(!backImage.isNull());
 }
 
 CardImages::~CardImages()

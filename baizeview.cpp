@@ -39,9 +39,9 @@ QRectF BaizeView::visibleSceneRect() const
     int zoomBy = event->angleDelta().y() / 120;
     qreal currentZoom = transform().m11();
     qreal factor;
-    if (zoomBy < 0 && currentZoom < 3.0)
+    if (zoomBy > 0 && currentZoom < 3.0)
         factor = 1.1;
-    else if (zoomBy > 0 && currentZoom > 0.333)
+    else if (zoomBy < 0 && currentZoom > 0.333)
         factor = 1.0 / 1.1;
     else
         return;

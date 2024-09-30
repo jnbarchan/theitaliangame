@@ -11,6 +11,7 @@ class CardGroup : public QList<const Card *>
 {
 public:
     CardGroup();
+    CardGroup(std::initializer_list<const Card *> args) : QList<const Card *>(args) {}
 
     enum SetType { RankSet, RunSet };
     QString toString() const;
