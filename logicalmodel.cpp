@@ -53,9 +53,20 @@ CardGroups LogicalModel::badSetGroups() const
     return badSets;
 }
 
-const Card *LogicalModel::takeCardFromDrawPile()
+const Card *LogicalModel::drawCardFromDrawPile()
 {
     const Card *card = cardDeck.dealNextCard();
+    if (card == nullptr)
+        return nullptr;
+    CardHand &hand(hands[activePlayer]);
+    hand.append(card);
+    hand.sortHand();
+    return card;
+}
+
+const Card *LogicalModel::extractCardFromDrawPile(int index)
+{
+    const Card *card = cardDeck.extractCardFromDrawPile(index);
     if (card == nullptr)
         return nullptr;
     CardHand &hand(hands[activePlayer]);

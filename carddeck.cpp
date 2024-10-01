@@ -56,6 +56,14 @@ const Card *CardDeck::dealNextCard()
     return at(nextCardToBeDealt++);
 }
 
+const Card *CardDeck::extractCardFromDrawPile(int index)
+{
+    Q_ASSERT(index >= nextCardToBeDealt && index < count());
+    const Card *card(at(index));
+    move(index, nextCardToBeDealt++);
+    return card;
+}
+
 int CardDeck::findCardIndex(int id) const
 {
     Q_ASSERT(id >= 0 && id < count());

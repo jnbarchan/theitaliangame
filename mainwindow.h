@@ -84,13 +84,14 @@ private slots:
     void baizeViewCoordinatesChanged();
     void baizeSceneSingleCardMoved(CardPixmapItem *item);
     void baizeSceneMultipleCardsMoved(QList<CardPixmapItem *> items);
-    void takeCardFromDrawPile();
+    void drawCardFromDrawPile();
+    void extractCardFromDrawPile(int id);
     void aiModelMadeTurn(AiModelTurnMoves turnMoves);
     void actionHandLayout(HandLayout handLayout);
     void actionLoadFile();
     void actionSaveFile();
-    void actionRestartTurn();
     void actionDeal();
+    void actionRestartTurn();
     void updateDrawCardEndTurnAction();
     void actionDrawCardEndTurn();
 

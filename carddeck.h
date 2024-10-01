@@ -22,6 +22,7 @@ public:
       random_shuffle(_RAIter itBegin, _RAIter itEnd) { std::shuffle(itBegin, itEnd, random_generator()); }
     void shuffle();
     const Card *dealNextCard();
+    const Card *extractCardFromDrawPile(int index);
     const Card *findCard(int id) const;
     const QList<const Card *> &initialFreeCards() const { return _initialFreeCards; }
     bool isInitialFreeCard(const Card *card) const;
@@ -30,8 +31,10 @@ public:
     QJsonObject serializeToJson() const;
     void deserializeFromJson(const QJsonObject &obj);
 
-private:
+public:
     int nextCardToBeDealt;
+
+private:
     QList<const Card *> _initialFreeCards;
 
     static std::mt19937 &random_generator();

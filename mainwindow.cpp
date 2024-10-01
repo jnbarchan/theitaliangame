@@ -1,6 +1,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QBoxLayout>
+#include <QComboBox>
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
@@ -14,7 +15,7 @@
 
 #include "baizescene.h"
 #include "baizeview.h"
-#include "qglobal.h"
+#include "selectcardmenu.h"
 
 #include "mainwindow.h"
 
@@ -41,7 +42,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(baizeView, &BaizeView::viewCoordinatesChanged, this, &MainWindow::baizeViewCoordinatesChanged);
     connect(baizeScene, &BaizeScene::singleCardMoved, this, &MainWindow::baizeSceneSingleCardMoved);
     connect(baizeScene, &BaizeScene::multipleCardsMoved, this, &MainWindow::baizeSceneMultipleCardsMoved);
-    connect(baizeScene, &BaizeScene::drawPileDoubleClicked, this, &MainWindow::takeCardFromDrawPile);
+    connect(baizeScene, &BaizeScene::drawPileDoubleClicked, this, &MainWindow::drawCardFromDrawPile);
 
     connect(this, &MainWindow::aiModelMakeTurn, &aiModel, &AiModel::makeTurn);
     connect(&aiModel, &AiModel::madeTurn, this, &MainWindow::aiModelMadeTurn);
@@ -124,10 +125,16 @@ void MainWindow::setupUi()
     mainMenu->addAction("Open File...", this, &MainWindow::actionLoadFile);
     mainMenu->addAction("Save File...", this, &MainWindow::actionSaveFile);
     mainMenu->addSeparator();
+    mainMenu->addAction("Deal", this, &MainWindow::actionDeal);
+    mainMenu->addSeparator();
     mainMenu->addAction("Restart Turn", this, &MainWindow::actionRestartTurn);
     this->menuActionDrawCardEndTurn = mainMenu->addAction("Draw Card/End Turn", this, &MainWindow::actionDrawCardEndTurn);
+
     mainMenu->addSeparator();
-    mainMenu->addAction("Deal", this, &MainWindow::actionDeal);
+    SelectCardMenu *selectCardMenu = new SelectCardMenu(&cardDeck, "Select Card from Draw Pile...", this);
+    mainMenu->addMenu(selectCardMenu);
+    connect(selectCardMenu, &SelectCardMenu::cardClicked, this, &MainWindow::extractCardFromDrawPile);
+
     mainMenu->addSeparator();
     mainMenu->addAction("Exit", qApp, &QApplication::quit);
 
@@ -603,12 +610,12 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     tidyGroups();
 }
 
-/*slot*/ void MainWindow::takeCardFromDrawPile()
+/*slot*/ void MainWindow::drawCardFromDrawPile()
 {
     if (havePlayedCard() || haveDrawnCard)
         return;
 
-    const Card *card = logicalModel.takeCardFromDrawPile();
+    const Card *card = logicalModel.drawCardFromDrawPile();
     if (card == nullptr)
         return;
     showHand(activePlayer, true);
@@ -621,12 +628,21 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
         QTimer::singleShot(2000, this, &MainWindow::actionDrawCardEndTurn);
 }
 
+/*slot*/ void MainWindow::extractCardFromDrawPile(int id)
+{
+    const Card *card = logicalModel.extractCardFromDrawPile(id);
+    if (card == nullptr)
+        return;
+    showHand(activePlayer, true);
+    baizeScene->blinkingCard()->start(card);
+}
+
 /*slot*/ void MainWindow::aiModelMadeTurn(AiModelTurnMoves turnMoves)
 {
     if (turnMoves.isEmpty())
     {
         qDebug() << "aiModelMadeTurn:" << "AI draws card";
-        takeCardFromDrawPile();
+        drawCardFromDrawPile();
     }
     else
     {
@@ -676,14 +692,6 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     file.commit();
 }
 
-/*slot*/ void MainWindow::actionRestartTurn()
-{
-    deserializeFromJson(serializationDoc);
-    tidyGroups();
-    showHands();
-    startTurn(true);
-}
-
 /*slot*/ void MainWindow::actionDeal()
 {
     shuffleAndDeal();
@@ -692,6 +700,14 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     sortAndShow();
 
     startTurn();
+}
+
+/*slot*/ void MainWindow::actionRestartTurn()
+{
+    deserializeFromJson(serializationDoc);
+    tidyGroups();
+    showHands();
+    startTurn(true);
 }
 
 void MainWindow::updateDrawCardEndTurnAction()
@@ -705,7 +721,7 @@ void MainWindow::updateDrawCardEndTurnAction()
 {
     if (!havePlayedCard() && !haveDrawnCard)
     {
-        takeCardFromDrawPile();
+        drawCardFromDrawPile();
         return;
     }
 

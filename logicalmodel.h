@@ -21,7 +21,8 @@ public:
     bool isInitialCardGroup(const CardGroup &group) const;
     CardGroup &initialFreeCardGroup(const Card *card);
     CardGroups badSetGroups() const;
-    const Card *takeCardFromDrawPile();
+    const Card *drawCardFromDrawPile();
+    const Card *extractCardFromDrawPile(int index);
     void updateInitialFreeCards();
     void startOfTurn();
     void endOfTurn();
