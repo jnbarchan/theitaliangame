@@ -5,17 +5,20 @@
 
 #include "logicalmodel.h"
 
-class AiModelTurnMove
+class AiModelState
 {
 public:
-    enum MoveType { PlayCompleteSetFromHand, PlayCompleteSetFromHandPlusBaize, PlayAddToCompleteSetOnBaizeFromHand, };
-    MoveType moveType;
-    CardGroup cardGroup;
+    CardHand aiHand;
+    CardGroups cardGroups;
+
+    AiModelState() {}
+    AiModelState(const CardHand &aiHand, const CardGroups &cardGroups) { this->aiHand = aiHand; this->cardGroups = cardGroups; }
+    bool isNull() const { return (aiHand.isEmpty() && cardGroups.isEmpty()); }
 };
 
 
 
-class AiModelTurnMoves : public QList<AiModelTurnMove>
+class AiModelStates : public QList<AiModelState>
 {
 
 };
@@ -30,40 +33,42 @@ public:
 
     LogicalModel *logicalModel;
 
-    CardHand &aiHand() const;
-
 private:
-    int &activePlayer() const { return logicalModel->activePlayer; }
-    CardDeck &cardDeck() const { return logicalModel->cardDeck; }
-    CardHands &hands() const { return logicalModel->hands; }
-    CardGroups &cardGroups() const { return logicalModel->cardGroups; }
+    const CardDeck &cardDeck() const { return logicalModel->cardDeck; }
+    int activePlayer() const { return logicalModel->activePlayer; }
+    const CardGroups &cardGroups() const { return logicalModel->cardGroups; }
+    const CardHands &hands() const { return logicalModel->hands; }
+    const CardHand &aiHand() const;
+
+    void verifyChangedState(AiModelState initialState, AiModelState newState) const;
     QList<const Card *> freeCardsInGroup(const CardGroup &group) const;
-    QList<const Card *> findAllFreeCardsOnBaize() const;
+    QList<const Card *> findAllFreeCardsInGroups(const CardGroups &groups) const;
     void removeFirstCardRankSet(CardHand &hand, CardGroup &rankSet) const;
     void removeFirstCardRunSet(CardHand &hand, CardGroup &runSet) const;
     void removeFirstCardGenerateAll2CardPartialRunSets(CardHand &hand, CardGroups &runSets) const;
-    CardGroups findAllCompleteRankSetsInHand() const;
-    CardGroups findAllCompleteRunSetsInHand() const;
-    CardGroups findAllPartialRankSetsFrom2CardsInHand() const;
-    CardGroups findAllPartialRunSetsFrom2CardsInHand() const;
-    CardGroups completeAllPartialRankSetsFrom1CardOnBaize(const CardGroups &rankPartialSets) const;
-    CardGroups completeAllPartialRunSetsFrom1CardOnBaize(const CardGroups &runPartialSets) const;
-    CardGroups findAllCompleteRankSetsFrom2CardsInHand() const;
-    CardGroups findAllCompleteRunSetsFrom2CardsInHand() const;
-    CardGroups findAllAddToSetsFrom1CardInHand() const;
-    CardGroups findAllCompleteSetsInHand() const;
-    CardGroups findAllCompleteSetsFrom2CardsInHand() const;
-    CardGroups findAllAddToCompleteSetsFrom1CardInHand() const;
-    CardGroups findAllAddToRankSetsFrom1CardInHand() const;
-    CardGroups findAllAddToRunSetsFrom1CardInHand() const;
-    CardGroups findAllCompleteSetsFrom1CardInHand() const;
-    CardGroups findAllMakeNewSetsFrom1CardInHand() const;
+    AiModelStates findAllCompleteRankSetsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteRunSetsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllPartialRankSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllPartialRunSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates completePartialRankSetFrom1CardOnBaize(const AiModelState &initialState) const;
+    AiModelStates completePartialRunSetFrom1CardOnBaize(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteRankSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteRunSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllAddToSetsFrom1CardInHand(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteSetsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates findAllAddToCompleteSetsFrom1CardInHand(const AiModelState &initialState) const;
+    AiModelStates findAllCompleteSetsFrom1CardInHand(const AiModelState &initialState) const;
+    AiModelStates findAllMakeNewSetsFrom1CardInHand(const AiModelState &initialState) const;
+    AiModelState findOneSimpleTurnPlay(const AiModelState &initialState, int depth) const;
+    AiModelState findOneComplexTurnPlay(const AiModelState &initialState, int depth) const;
+    AiModelState findOneTurnPlay() const;
 
 public slots:
     void makeTurn();
 
 signals:
-    void madeTurn(AiModelTurnMoves turnMoves);
+    void makeTurnPlay(AiModelState turnPlay);
 };
 
 #endif // AIMODEL_H

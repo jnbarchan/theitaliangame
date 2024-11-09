@@ -1,10 +1,24 @@
 #include <QDebug>
 
+#include "utils.h"
 #include "cardgroup.h"
+
+/*static*/ long CardGroup::_nextUniqueId = 1L;
 
 CardGroup::CardGroup()
 {
+    this->_uniqueId = _nextUniqueId++;
+}
 
+CardGroup::CardGroup(std::initializer_list<const Card *> args) :
+    QList<const Card *>(args)
+{
+    this->_uniqueId = _nextUniqueId++;
+}
+
+/*static*/ void CardGroup::resetNextUniqueId()
+{
+    CardGroup::_nextUniqueId = 1L;
 }
 
 QString CardGroup::toString() const
@@ -110,6 +124,12 @@ bool CardGroup::isGoodSet() const
    return isGoodSet(setType);
 }
 
+void CardGroup::removeCards(QList<const Card *> cards)
+{
+    for (const Card *card : cards)
+        removeOne(card);
+}
+
 
 
 CardGroups::CardGroups()
@@ -132,6 +152,15 @@ QString CardGroups::toString() const
 void CardGroups::clearGroups()
 {
     clear();
+    CardGroup::resetNextUniqueId();
+}
+
+int CardGroups::findCardGroupByUniqueId(int uniqueId) const
+{
+    for (int i = 0; i < count(); i++)
+        if (at(i).uniqueId() == uniqueId)
+            return i;
+    return -1;
 }
 
 int CardGroups::findCardInGroups(const Card *card) const
@@ -140,16 +169,29 @@ int CardGroups::findCardInGroups(const Card *card) const
         if (at(i).indexOf(card) >= 0)
             return i;
     return -1;
-//    for (auto &group : *this)
-//        return &group;
-    //    return nullptr;
+}
+
+int CardGroups::removeCardFromGroups(const Card *card)
+{
+    for (int i = 0; i < count(); i++)
+        if ((*this)[i].removeOne(card))
+            return i;
+    return -1;
 }
 
 void CardGroups::removeEmptyGroups()
 {
     for (int i = count() - 1; i >= 0; i--)
         if (at(i).isEmpty())
-            removeAt(i);;
+            removeAt(i);
+}
+
+QList<const Card *> CardGroups::allCards() const
+{
+    QList<const Card *> cards;
+    for (const CardGroup &cardGroup : *this)
+        cards.append(cardGroup);
+    return cards;
 }
 
 QJsonArray CardGroups::serializeToJson() const

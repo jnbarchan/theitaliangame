@@ -16,6 +16,7 @@
 #include "baizescene.h"
 #include "baizeview.h"
 #include "selectcardmenu.h"
+#include "utils.h"
 
 #include "mainwindow.h"
 
@@ -45,7 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(baizeScene, &BaizeScene::drawPileDoubleClicked, this, &MainWindow::drawCardFromDrawPile);
 
     connect(this, &MainWindow::aiModelMakeTurn, &aiModel, &AiModel::makeTurn);
-    connect(&aiModel, &AiModel::madeTurn, this, &MainWindow::aiModelMadeTurn);
+    connect(&aiModel, &AiModel::makeTurnPlay, this, &MainWindow::aiModelMakeTurnPlay);
 
     cardDeck.createCards();
 
@@ -364,7 +365,7 @@ QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
     QList<QRectF> freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count(), baizeView->visibleSceneRect());
     if (freeRectangles.isEmpty())
         freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count());
-    cardDeck.random_shuffle(freeRectangles.begin(), freeRectangles.end());
+    RandomNumber::random_shuffle(freeRectangles.begin(), freeRectangles.end());
     QPointF newGroupPoint = { -600, -300 };
     if (!freeRectangles.isEmpty())
     {
@@ -378,97 +379,94 @@ QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
     return newGroupPoint;
 }
 
-void MainWindow::aiModelMakeMove(const AiModelTurnMove &turnMove)
+void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
 {
     Q_ASSERT(hands.isAiPlayer(activePlayer));
-    CardHand &aiHand(aiModel.aiHand());
-    CardGroup cardGroup(turnMove.cardGroup);
+    CardHand &aiHand(hands[activePlayer]);
+    const CardGroups &cardGroupsChanged(turnPlay.cardGroups);
+    Q_ASSERT(!cardGroupsChanged.isEmpty());
 
-    switch (turnMove.moveType)
-    {
-    case AiModelTurnMove::PlayCompleteSetFromHand:
-    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize:
-    case AiModelTurnMove::PlayAddToCompleteSetOnBaizeFromHand: {
-        Q_ASSERT(cardGroup.count() >= 3);
-        for (const Card *card : cardGroup)
-            if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
-                Q_ASSERT(aiHand.contains(card));
+    for (int pass = 0; pass < 2; pass++)
+        for (const CardGroup &changedCardGroup : cardGroupsChanged)
+        {
+            enum ChangeType { Add, Delete, Modify } changeType;
+            int oldCardGroupIndex = cardGroups.findCardGroupByUniqueId(changedCardGroup.uniqueId());
+            if (oldCardGroupIndex < 0)
+                changeType = Add;
+            else if (changedCardGroup.isEmpty())
+                changeType = Delete;
             else
+                changeType = Modify;
+
+            if (pass == 0 && changeType == Delete)
+                continue;
+            else if (pass == 1 && changeType != Delete)
+                continue;
+
+            Q_ASSERT((changeType == Delete) ? changedCardGroup.isEmpty() : !changedCardGroup.isEmpty());
+            if (changeType == Add && changedCardGroup.isEmpty())
+                continue;
+            else if (changeType == Delete && oldCardGroupIndex < 0)
+                continue;
+            else if (changeType == Modify && cardGroups.at(oldCardGroupIndex) == changedCardGroup)
+                continue;
+
+            if (changeType == Delete)
+            {
+                Q_ASSERT(cardGroups.at(oldCardGroupIndex).isEmpty());
+                continue;
+            }
+
+            Q_ASSERT(changedCardGroup.count() >= 3);
+            Q_ASSERT(changedCardGroup.isGoodSet());
+            for (const Card *card : changedCardGroup)
                 Q_ASSERT(aiHand.contains(card) || cardGroups.findCardInGroups(card) >= 0);
-        CardGroup::SetType setType;
-        bool isGoodSet = cardGroup.isGoodSet(setType);
-        Q_ASSERT(isGoodSet);
-    }
-        break;
-    default: break;
-    }
 
-
-    switch (turnMove.moveType)
-    {
-    case AiModelTurnMove::PlayCompleteSetFromHand:
-    case AiModelTurnMove::PlayCompleteSetFromHandPlusBaize: {
-        if (turnMove.moveType == AiModelTurnMove::PlayCompleteSetFromHand)
-            qDebug() << "aiModelMakeMove:" << "PlayCompleteSetFromHand:" << cardGroup.toString();
-        else
-            qDebug() << "aiModelMakeMove:" << "PlayCompleteSetFromHandPlusBaize:" << cardGroup.toString();
-
-        // (try to) find free area for card group
-        QPointF newGroupPoint = findFreeAreaForCardGroup(cardGroup);
-
-        // moving from Hand to baize, new group
-        CardGroup newGroup;
-        cardGroups.append(newGroup);
-        for (const Card *card : cardGroup)
-        {
-            if (aiHand.contains(card))
-                aiHand.removeOne(card);
-            else
+            if (changeType == Add)
             {
-                int wasInGroup = cardGroups.findCardInGroups(card);
-                Q_ASSERT(wasInGroup >= 0);
-                cardGroups[wasInGroup].removeOne(card);
-            }
-            cardGroups.last().append(card);
-            CardPixmapItem *item = baizeScene->findItemForCard(card);
-            Q_ASSERT(item);
-            item->setPos(newGroupPoint);
-        }
-    }
-        break;
+                // (try to) find free area for new card group
+                QPointF newGroupPoint = findFreeAreaForCardGroup(changedCardGroup);
 
-    case AiModelTurnMove::PlayAddToCompleteSetOnBaizeFromHand: {
-        qDebug() << "aiModelMakeMove:" << "PlayAddToCompleteSetOnBaizeFromHand:" << cardGroup.toString();
-        // moving from Hand to baize, existing group
-        int existingGroup = -1;
-        for (const Card *card : cardGroup)
-        {
-            int isInGoup = cardGroups.findCardInGroups(card);
-            if (isInGoup < 0)
-                Q_ASSERT(aiHand.contains(card));
-            else if (existingGroup < 0)
-                existingGroup = isInGoup;
-            else
-                Q_ASSERT(isInGoup == existingGroup);
-        }
-        Q_ASSERT(existingGroup >= 0);
-        const Card *existingGroupCard = cardGroups.at(existingGroup).at(0);
-        const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
-        Q_ASSERT(existingGroupItem);
-        for (const Card *card : cardGroup)
-            if (aiHand.contains(card))
+                for (const Card *card : changedCardGroup)
+                {
+                    if (aiHand.contains(card))
+                        aiHand.removeOne(card);
+                    else
+                    {
+                        int wasInGroup = cardGroups.findCardInGroups(card);
+                        Q_ASSERT(wasInGroup >= 0);
+                        cardGroups[wasInGroup].removeOne(card);
+                    }
+                    CardPixmapItem *item = baizeScene->findItemForCard(card);
+                    Q_ASSERT(item);
+                    item->setPos(newGroupPoint);
+                }
+                cardGroups.append(changedCardGroup);
+            }
+            else if (changeType == Modify)
             {
-                aiHand.removeOne(card);
-                cardGroups[existingGroup].append(card);
-                CardPixmapItem *item = baizeScene->findItemForCard(card);
-                Q_ASSERT(item);
-                item->setPos(existingGroupItem->pos());
+                CardGroup &existingCardGroup(cardGroups[oldCardGroupIndex]);
+                const Card *existingGroupCard = existingCardGroup.at(0);
+                const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
+                for (const Card *card : changedCardGroup)
+                {
+                    if (aiHand.contains(card))
+                        aiHand.removeOne(card);
+                    else
+                    {
+                        if (existingCardGroup.contains(card))
+                            continue;
+                        int wasInGroup = cardGroups.findCardInGroups(card);
+                        Q_ASSERT(wasInGroup >= 0);
+                        cardGroups[wasInGroup].removeOne(card);
+                    }
+                    existingCardGroup.append(card);
+                    CardPixmapItem *item = baizeScene->findItemForCard(card);
+                    Q_ASSERT(item);
+                    item->setPos(existingGroupItem->pos());
+                }
             }
-    }
-        break;
-
-    default: Q_ASSERT(false);
-    }
+        }
 
     // tidy up
     showHand(activePlayer);
@@ -637,18 +635,17 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     baizeScene->blinkingCard()->start(card);
 }
 
-/*slot*/ void MainWindow::aiModelMadeTurn(AiModelTurnMoves turnMoves)
+/*slot*/ void MainWindow::aiModelMakeTurnPlay(AiModelState turnPlay)
 {
-    if (turnMoves.isEmpty())
+    if (turnPlay.isNull())
     {
-        qDebug() << "aiModelMadeTurn:" << "AI draws card";
+        qDebug() << __FUNCTION__ << "AI draws card";
         drawCardFromDrawPile();
     }
     else
     {
-        qDebug() << "aiModelMadeTurn:" << "AI makes moves, count:" << turnMoves.count();
-        for (const AiModelTurnMove &turnMove : turnMoves)
-            aiModelMakeMove(turnMove);
+        qDebug() << __FUNCTION__ << "AI makes play(s)";
+        aiModelMakePlays(turnPlay);
     }
 }
 

@@ -23,7 +23,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
         aimodel.cpp aimodel.h baizescene.cpp baizescene.h baizeview.cpp baizeview.h card.cpp card.h carddeck.cpp carddeck.h cardgroup.cpp cardgroup.h cardhand.cpp cardhand.h cardimages.cpp cardimages.h LICENSE logicalmodel.cpp logicalmodel.h main.cpp mainwindow.cpp mainwindow.h README.md
-        selectcardmenu.h selectcardmenu.cpp
+        selectcardmenu.h selectcardmenu.cpp utils.h utils.cpp
     )
 endif()
 

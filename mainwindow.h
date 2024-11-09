@@ -59,9 +59,6 @@ private:
     const QString &appRootPath();
     const QString appSavesPath();
     void setupUi();
-    void clearHands();
-    void sortHands();
-    void sortHand(CardHand &hand);
     void showHands();
     void handCardLayoutInfo(int player, int handCount, MainWindow::HandCardLayoutInfo &hcli) const;
     QRectF handAreaRect(int player) const;
@@ -76,7 +73,7 @@ private:
     void startTurn(bool restart = false);
     void autosave();
     QPointF findFreeAreaForCardGroup(const CardGroup &cardGroup) const;
-    void aiModelMakeMove(const AiModelTurnMove &turnMove);
+    void aiModelMakePlays(const AiModelState &turnPlay);
     QJsonDocument serializeToJson() const;
     void deserializeFromJson(const QJsonDocument &doc);
 
@@ -86,7 +83,7 @@ private slots:
     void baizeSceneMultipleCardsMoved(QList<CardPixmapItem *> items);
     void drawCardFromDrawPile();
     void extractCardFromDrawPile(int id);
-    void aiModelMadeTurn(AiModelTurnMoves turnMoves);
+    void aiModelMakeTurnPlay(AiModelState turnPlay);
     void actionHandLayout(HandLayout handLayout);
     void actionLoadFile();
     void actionSaveFile();

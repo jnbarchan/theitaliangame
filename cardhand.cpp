@@ -12,6 +12,12 @@ void CardHand::sortHand()
     std::sort(begin(), end(), Card::compareForSortBySuit);
 }
 
+void CardHand::removeCards(QList<const Card *> cards)
+{
+    for (const Card *card : cards)
+        removeOne(card);
+}
+
 
 
 CardHands::CardHands()
