@@ -50,8 +50,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     cardDeck.createCards();
 
-    hands.totalHands = 2;
-    hands.aiPlayers = { true, false };
+    // hands.totalHands = 2;
+    // hands.aiPlayers = { true, false };
+    hands.totalHands = 1;
+    hands.aiPlayers = { true };
     hands.initialHandCardCount = 13;
 
     this->aiModel.logicalModel = &this->logicalModel;
@@ -369,7 +371,7 @@ QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
     QPointF newGroupPoint = { -600, -300 };
     if (!freeRectangles.isEmpty())
     {
-        const QRectF &freeRect(freeRectangles.at(0));
+        const QRectF &freeRect(freeRectangles.first());
         QRectF cardsRect(QPointF(freeRect.topLeft()), baizeScene->cardsAsGroupSize(cardGroup.count()));
         Q_ASSERT(freeRect.contains((cardsRect)));
         cardsRect.moveCenter(freeRect.center());
@@ -446,7 +448,7 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
             else if (changeType == Modify)
             {
                 CardGroup &existingCardGroup(cardGroups[oldCardGroupIndex]);
-                const Card *existingGroupCard = existingCardGroup.at(0);
+                const Card *existingGroupCard = existingCardGroup.first();
                 const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
                 for (const Card *card : changedCardGroup)
                 {
@@ -710,7 +712,7 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 void MainWindow::updateDrawCardEndTurnAction()
 {
     menuActionDrawCardEndTurn->setText((havePlayedCard() || haveDrawnCard) ? "End Turn" : "Draw Card");
-    baizeScene->preventMovingCards(haveDrawnCard);
+    baizeScene->setPreventMovingCards(haveDrawnCard);
     menuActionDrawCardEndTurn->setEnabled(logicalModel.badSetGroups().isEmpty());
 }
 

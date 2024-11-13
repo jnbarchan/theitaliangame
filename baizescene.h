@@ -79,14 +79,14 @@ public:
     QGraphicsTextItem *playerNameItem() const { return _playerNameItem; }
     QGraphicsProxyWidget *drawCardEndTurnButton() const { return _drawCardEndTurnButton; }
     void reset();
-    void preventMovingCards(bool prevent) { _preventMovingCards = prevent; }
+    void setPreventMovingCards(bool prevent) { _preventMovingCards = prevent; }
     CardBlinker *blinkingCard() { return _blinkingCard; }
     CardPixmapItem *addCard(const Card *card, int x, int y);
     CardPixmapItem *findItemForCard(const Card *card) const;
     const Card *findOtherCardForItemPosition(const CardPixmapItem *item) const;
     void removeAllCardGroupBoxes();
     QSize cardsAsGroupSize(int cardCount);
-    void layoutCardsAsGroup(QList<const Card *> cards, bool isBadSetGroup = false, bool isInitialCardGroup = false);
+    void layoutCardsAsGroup(const QList<const Card *> &cards, bool isBadSetGroup = false, bool isInitialCardGroup = false);
     QList<QRectF> findFreeRectanglesToPlaceCards(int cardCount, QRectF placeInRect = QRectF());
     void showFreeRectangles(const QList<QRectF> &freeRectangles);
     QJsonObject serializeToJson() const;
@@ -106,7 +106,7 @@ private:
     void createPlayerNameItem();
     void createDrawCardEndTurnButton();
     QRectF calcBoundingRect(const QList<CardPixmapItem *> &items);
-    QList<QGraphicsItem *> findContainingItems(const QGraphicsItem *item, const QList<QGraphicsItem *> items) const;
+    QList<QGraphicsItem *> findContainingItems(const QGraphicsItem *item, const QList<QGraphicsItem *> &items) const;
     QList<QRectF> calcMaximalFreeRectangles();
 
 protected:

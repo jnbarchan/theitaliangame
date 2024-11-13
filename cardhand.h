@@ -14,7 +14,7 @@ public:
     CardHand();
 
     void sortHand();
-    void removeCards(QList<const Card *> cards);
+    void removeCards(const QList<const Card *> &cards);
 };
 
 

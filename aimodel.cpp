@@ -14,23 +14,6 @@ const CardHand &AiModel::aiHand() const
 }
 
 
-void AiModel::verifyChangedState(AiModelState initialState, AiModelState newState) const
-{
-    QList<const Card *> initialCards(initialState.aiHand);
-    QList<const Card *> newStateCards(newState.aiHand);
-    initialCards.append(initialState.cardGroups.allCards());
-    newStateCards.append(newState.cardGroups.allCards());
-    while (!initialCards.isEmpty())
-    {
-        if (!newStateCards.removeOne(initialCards.first()))
-            Q_ASSERT(false);
-        initialCards.removeFirst();
-    }
-    Q_ASSERT(initialCards.isEmpty());
-    Q_ASSERT(newStateCards.isEmpty());
-}
-
-
 QList<const Card *> AiModel::freeCardsInGroup(const CardGroup &group) const
 {
     QList<const Card *> freeCards;
@@ -39,14 +22,13 @@ QList<const Card *> AiModel::freeCardsInGroup(const CardGroup &group) const
     else
     {
         CardGroup::SetType setType;
-        bool isGoodSet = group.isGoodSet(setType);
-        if (isGoodSet)
+        if (group.isGoodSet(setType))
             if (group.count() > 3)
             {
                 if (setType == CardGroup::RankSet)
                     freeCards.append(group);
                 else if (setType == CardGroup::RunSet)
-                    freeCards.append({group.at(0), group.at(group.count() - 1)});
+                    freeCards.append({group.first(), group.last()});
             }
     }
     return freeCards;
@@ -72,7 +54,7 @@ void AiModel::removeFirstCardRankSet(CardHand &hand, CardGroup &rankSet) const
         return;
     rankSet.append(hand.takeAt(0));
     // check for same rank (different suits)
-    const Card *card0 = rankSet.at(0);
+    const Card *card0 = rankSet.first();
     QSet<int> suits{card0->suit()};
     for (int i = 0; i < hand.count(); i++)
     {
@@ -96,7 +78,7 @@ void AiModel::removeFirstCardRunSet(CardHand &hand, CardGroup &runSet) const
         return;
     runSet.append(hand.takeAt(0));
     // check for sequential cards in same suit
-    const Card *card0 = runSet.at(0), *card1 = runSet.at(0);
+    const Card *card0 = runSet.first(), *card1 = runSet.last();
     for (int i = 0; i < hand.count(); i++)
     {
         const Card *card = hand.at(i);
@@ -105,13 +87,13 @@ void AiModel::removeFirstCardRunSet(CardHand &hand, CardGroup &runSet) const
         if (runSet.rankDifference(card->rank(), card0->rank()) == 1)
         {
             runSet.prepend(hand.takeAt(i));
-            card0 = runSet.at(0);
+            card0 = runSet.first();
             i = -1;
         }
         else if (runSet.rankDifference(card->rank(), card1->rank()) == -1)
         {
             runSet.append(hand.takeAt(i));
-            card1 = runSet.at(runSet.count() - 1);
+            card1 = runSet.last();
             i = -1;
         }
     }
@@ -144,6 +126,104 @@ void AiModel::removeFirstCardGenerateAll2CardPartialRunSets(CardHand &hand, Card
 }
 
 
+CardGroups AiModel::pivotSets(CardGroups existingSets) const
+{
+    // "pivot" the card groups, so that we make new groups by combining each first card in each set
+    // to make a new set, and same for the second, third... card in each set
+    // this can be used to try making a group of run sets into ranks sets or vice versa
+
+    CardGroups newSets;
+    for (CardGroup &existingSet : existingSets)
+    {
+        Q_ASSERT(existingSet.count() == existingSets.first().count());
+        // ensure consistently sorted so that we produce right "pairing"
+        std::sort(existingSet.begin(), existingSet.end(), Card::compareForSortBySuit);
+        for (int i = 0; i < existingSet.count(); i++)
+        {
+            if (newSets.count() < i + 1)
+                newSets.resize(i + 1);
+            newSets[i].append(existingSet.at(i));
+        }
+    }
+    return newSets;
+}
+
+
+void AiModel::verifyChangedState(AiModelState initialState, AiModelState newState) const
+{
+    QList<const Card *> initialCards(initialState.aiHand);
+    QList<const Card *> newStateCards(newState.aiHand);
+    initialCards.append(initialState.cardGroups.allCards());
+    newStateCards.append(newState.cardGroups.allCards());
+    while (!initialCards.isEmpty())
+    {
+        if (!newStateCards.removeOne(initialCards.first()))
+            Q_ASSERT(false);
+        initialCards.removeFirst();
+    }
+    Q_ASSERT(initialCards.isEmpty());
+    Q_ASSERT(newStateCards.isEmpty());
+}
+
+
+void AiModel::addNewSet(AiModelState &state, const CardGroup &newSet) const
+{
+    int index = state.cardGroups.findCardGroupByUniqueId(newSet.uniqueId());
+    Q_ASSERT(index < 0);
+    state.cardGroups.append(newSet);
+}
+
+void AiModel::modifySet(AiModelState &state, const CardGroup &modifiedSet) const
+{
+    int index = state.cardGroups.findCardGroupByUniqueId(modifiedSet.uniqueId());
+    Q_ASSERT(index >= 0);
+    state.cardGroups.replace(index, modifiedSet);
+}
+
+void AiModel::removeSet(AiModelState &state, const CardGroup &existingSet) const
+{
+    int index = state.cardGroups.findCardGroupByUniqueId(existingSet.uniqueId());
+    Q_ASSERT(index >= 0);
+    state.cardGroups.removeAt(index);
+}
+
+
+void AiModel::removeCardFromHand(AiModelState &state, const Card *card) const
+{
+    if (!state.aiHand.removeOne(card))
+        Q_ASSERT(false);
+}
+
+void AiModel::removeCardsFromHand(AiModelState &state, const QList<const Card *> &cards) const
+{
+    for (const Card *card : cards)
+        removeCardFromHand(state, card);
+}
+
+void AiModel::removeCardFromGroups(AiModelState &state, const Card *card) const
+{
+    int index = state.cardGroups.removeCardFromGroups(card);
+    Q_ASSERT(index >= 0);
+}
+
+void AiModel::removeCardsFromGroups(AiModelState &state, const QList<const Card *> &cards) const
+{
+    for (const Card *card : cards)
+        removeCardFromGroups(state, card);
+}
+
+void AiModel::removeCardsFromOneGroup(AiModelState &state, const QList<const Card *> &cards) const
+{
+    if (cards.isEmpty())
+        return;
+    int index = state.cardGroups.removeCardFromGroups(cards.at(0));
+    Q_ASSERT(index >= 0);
+    for (int i = 1; i < cards.count(); i++)
+        if (!state.cardGroups[index].removeOne(cards.at(i)))
+            Q_ASSERT(false);
+}
+
+
 AiModelStates AiModel::findAllCompleteRankSetsInHand(const AiModelState &initialState) const
 {
     AiModelStates newStates;
@@ -155,8 +235,8 @@ AiModelStates AiModel::findAllCompleteRankSetsInHand(const AiModelState &initial
         if (rankSet.count() >= 3)
         {
             AiModelState newState(initialState);
-            newState.aiHand.removeCards(rankSet);
-            newState.cardGroups.append(rankSet);
+            removeCardsFromHand(newState, rankSet);
+            addNewSet(newState, rankSet);
             verifyChangedState(initialState, newState);
             newStates.append(newState);
         }
@@ -175,8 +255,8 @@ AiModelStates AiModel::findAllCompleteRunSetsInHand(const AiModelState &initialS
         if (runSet.count() >= 3)
         {
             AiModelState newState(initialState);
-            newState.aiHand.removeCards(runSet);
-            newState.cardGroups.append(runSet);
+            removeCardsFromHand(newState, runSet);
+            addNewSet(newState, runSet);
             verifyChangedState(initialState, newState);
             newStates.append(newState);
         }
@@ -196,8 +276,8 @@ AiModelStates AiModel::findAllPartialRankSetsFrom2CardsInHand(const AiModelState
         if (rankSet.count() == 2)
         {
             AiModelState newState(initialState);
-            newState.aiHand.removeCards(rankSet);
-            newState.cardGroups.append(rankSet);
+            removeCardsFromHand(newState, rankSet);
+            addNewSet(newState, rankSet);
             verifyChangedState(initialState, newState);
             newStates.append(newState);
         }
@@ -217,8 +297,8 @@ AiModelStates AiModel::findAllPartialRunSetsFrom2CardsInHand(const AiModelState 
         {
             Q_ASSERT(runSet.count() == 2);
             AiModelState newState(initialState);
-            newState.aiHand.removeCards(runSet);
-            newState.cardGroups.append(runSet);
+            removeCardsFromHand(newState, runSet);
+            addNewSet(newState, runSet);
             verifyChangedState(initialState, newState);
             newStates.append(newState);
         }
@@ -242,12 +322,11 @@ AiModelStates AiModel::completePartialRankSetFrom1CardOnBaize(const AiModelState
         {
             CardGroup rankSet(partialSet);
             rankSet.append(freeCard);
-            if (rankSet.isGoodSet())
+            if (rankSet.isGoodRankSet())
             {
                 AiModelState newState(initialState);
-                Q_ASSERT(newState.cardGroups.last() == partialSet);
-                newState.cardGroups.removeCardFromGroups(freeCard);
-                newState.cardGroups.replace(newState.cardGroups.count() - 1, rankSet);
+                removeCardFromGroups(newState, freeCard);
+                modifySet(newState, rankSet);
                 verifyChangedState(initialState, newState);
                 newStates.append(newState);
             }
@@ -274,12 +353,11 @@ AiModelStates AiModel::completePartialRunSetFrom1CardOnBaize(const AiModelState 
             CardGroup runSet(partialSet);
             runSet.append(freeCard);
             runSet.rearrangeForSets();
-            if (runSet.isGoodSet())
+            if (runSet.isGoodRunSet())
             {
                 AiModelState newState(initialState);
-                Q_ASSERT(newState.cardGroups.last() == partialSet);
-                newState.cardGroups.removeCardFromGroups(freeCard);
-                newState.cardGroups.replace(newState.cardGroups.count() - 1, runSet);
+                removeCardFromGroups(newState, freeCard);
+                modifySet(newState, runSet);
                 verifyChangedState(initialState, newState);
                 newStates.append(newState);
             }
@@ -324,7 +402,7 @@ AiModelStates AiModel::findAllAddToSetsFrom1CardInHand(const AiModelState &initi
         {
             if (existingSet.count() < 2)
                 continue;
-            if (existingSet.at(0)->rank() != card->rank() && existingSet.at(0)->suit() != card->suit())
+            if (existingSet.first()->rank() != card->rank() && existingSet.first()->suit() != card->suit())
                 continue;
             CardGroup newSet(existingSet);
             newSet.append(card);
@@ -332,10 +410,8 @@ AiModelStates AiModel::findAllAddToSetsFrom1CardInHand(const AiModelState &initi
             if (newSet.isGoodSet())
             {
                 AiModelState newState(initialState);
-                newState.aiHand.removeOne(card);
-                int newCardGroupIndex = newState.cardGroups.indexOf(existingSet);
-                Q_ASSERT(newCardGroupIndex >= 0);
-                newState.cardGroups.replace(newCardGroupIndex, newSet);
+                removeCardFromHand(newState, card);
+                modifySet(newState, newSet);
                 verifyChangedState(initialState, newState);
                 newStates.append(newState);
             }
@@ -354,41 +430,31 @@ AiModelStates AiModel::findAllMakeNewSetsFrom1CardInHand(const AiModelState &ini
         const Card *card0 = hand.takeFirst();
         for (const CardGroup &existingSet1 : initialState.cardGroups)
         {
-            if (existingSet1.count() < 4)
+            if (existingSet1.count() > 1 && existingSet1.count() < 4)
                 continue;
             CardGroup::SetType setType;
-            bool isGoodSet = existingSet1.isGoodSet(setType);
+            bool isGoodSet1 = existingSet1.isGoodSet(setType);
 
-            if (existingSet1.count() >= 5 && isGoodSet)
+            if (existingSet1.count() >= 5 && isGoodSet1)
             {
                 Q_ASSERT(setType == CardGroup::RunSet);
                 if (existingSet1.at(0)->suit() == card0->suit())
-                {
-                    CardGroup newSet = {card0, existingSet1.at(0), existingSet1.at(1)};
-                    newSet.rearrangeForSets();
-                    if (newSet.isGoodSet())
+                    for (int pass = 0; pass < 2; pass++)
                     {
-                        AiModelState newState(initialState);
-                        newState.aiHand.removeOne(card0);
-                        newState.cardGroups.removeCardFromGroups(existingSet1.at(0));
-                        newState.cardGroups.removeCardFromGroups(existingSet1.at(1));
-                        newState.cardGroups.append(newSet);
-                        verifyChangedState(initialState, newState);
-                        newStates.append(newState);
+                        const Card *card1 = (pass == 0) ? existingSet1.at(0) : existingSet1.at(existingSet1.count() - 1);
+                        const Card *card2 = (pass == 0) ? existingSet1.at(1) : existingSet1.at(existingSet1.count() - 2);
+                        CardGroup newSet = {card0, card1, card2};
+                        newSet.rearrangeForSets();
+                        if (newSet.isGoodRunSet())
+                        {
+                            AiModelState newState(initialState);
+                            removeCardFromHand(newState, card0);
+                            removeCardsFromOneGroup(newState, {card1, card2});
+                            addNewSet(newState, newSet);
+                            verifyChangedState(initialState, newState);
+                            newStates.append(newState);
+                        }
                     }
-                    newSet = {card0, existingSet1.at(existingSet1.count() - 1), existingSet1.at(existingSet1.count() - 2)};
-                    newSet.rearrangeForSets();
-                    if (newSet.isGoodSet())
-                    {
-                        AiModelState newState(initialState);
-                        newState.aiHand.removeOne(card0);
-                        newState.cardGroups.removeCardFromGroups(existingSet1.at(existingSet1.count() - 1));
-                        newState.cardGroups.removeCardFromGroups(existingSet1.at(existingSet1.count() - 2));
-                        newState.cardGroups.append(newSet);
-                        verifyChangedState(initialState, newState);
-                        newStates.append(newState);
-                    }
-                }
             }
 
             QList<const Card *> freeCards1(freeCardsInGroup(existingSet1));
@@ -410,10 +476,10 @@ AiModelStates AiModel::findAllMakeNewSetsFrom1CardInHand(const AiModelState &ini
                         if (newSet.isGoodSet())
                         {
                             AiModelState newState(initialState);
-                            newState.aiHand.removeOne(card0);
-                            newState.cardGroups.removeCardFromGroups(card1);
-                            newState.cardGroups.removeCardFromGroups(card2);
-                            newState.cardGroups.append(newSet);
+                            removeCardFromHand(newState, card0);
+                            removeCardFromGroups(newState, card1);
+                            removeCardFromGroups(newState, card2);
+                            addNewSet(newState, newSet);
                             verifyChangedState(initialState, newState);
                             newStates.append(newState);
                         }
@@ -510,17 +576,221 @@ AiModelState AiModel::findOneSimpleTurnPlay(const AiModelState &initialState, in
     return {};
 }
 
+
+AiModelState AiModel::searchEquivalent1FreeCardMoveStates(const AiModelState &initialState, int depth) const
+{
+    AiModelState turnPlay;
+
+    // for each free card, move to each other (complete) set and search again
+    QList<const Card *> freeCards = findAllFreeCardsInGroups(initialState.cardGroups);
+    for (const Card *freeCard : freeCards)
+        for (const CardGroup &existingSet : initialState.cardGroups)
+        {
+            if (existingSet.contains(freeCard))
+                continue;
+            if (existingSet.count() < 2)
+                continue;
+            if (existingSet.first()->rank() != freeCard->rank() && existingSet.first()->suit() != freeCard->suit())
+                continue;
+            CardGroup newSet(existingSet);
+            newSet.append(freeCard);
+            newSet.rearrangeForSets();
+            if (newSet.isGoodSet())
+            {
+                AiModelState newState(initialState);
+                removeCardFromGroups(newState, freeCard);
+                modifySet(newState, newSet);
+                verifyChangedState(initialState, newState);
+
+                turnPlay = findOneSimpleTurnPlay(newState, depth + 1);
+                if (!turnPlay.isNull())
+                    return turnPlay;
+            }
+        }
+
+    return {};
+}
+
+AiModelState AiModel::searchEquivalent1JoinSetsStates(const AiModelState &initialState, int depth) const
+{
+    AiModelState turnPlay;
+
+    // for each complete run set, join onto each other complete run set and search again
+    for (const CardGroup &existingSet1 : initialState.cardGroups)
+    {
+        if (existingSet1.count() < 2)
+            continue;
+        if (!existingSet1.isGoodRunSet())
+            continue;
+        for (const CardGroup &existingSet2 : initialState.cardGroups)
+        {
+            if (existingSet2 == existingSet1)
+                continue;
+            if (existingSet2.count() < 2)
+                continue;
+            if (!existingSet2.isGoodRunSet())
+                continue;
+            if (existingSet2.first()->suit() != existingSet1.first()->suit())
+                continue;
+            CardGroup newSet(existingSet1);
+            newSet.append(existingSet2);
+            newSet.rearrangeForSets();
+            if (newSet.isGoodRunSet())
+            {
+                AiModelState newState(initialState);
+                removeCardsFromOneGroup(newState, existingSet2);
+                modifySet(newState, newSet);
+                verifyChangedState(initialState, newState);
+
+                turnPlay = findOneSimpleTurnPlay(newState, depth + 1);
+                if (!turnPlay.isNull())
+                    return turnPlay;
+            }
+        }
+    }
+
+    return {};
+}
+
+AiModelState AiModel::searchEquivalent1SplitSetsStates(const AiModelState &initialState, int depth) const
+{
+    AiModelState turnPlay;
+
+    // for each long complete run set, split into each other short complete run set and search again
+    for (const CardGroup &existingSet : initialState.cardGroups)
+    {
+        if (existingSet.count() < 6)
+            continue;
+        if (!existingSet.isGoodRunSet())
+            continue;
+        for (int splitIndex = 3; splitIndex <= existingSet.count() - 3; splitIndex++)
+        {
+            CardGroup existingSet1(existingSet);
+            CardGroup newSet;
+            while (splitIndex < existingSet1.count())
+                newSet.append(existingSet1.takeAt(splitIndex));
+            Q_ASSERT(existingSet1.isGoodRunSet());
+            Q_ASSERT(newSet.isGoodRunSet());
+            if (existingSet1.isGoodRunSet() && newSet.isGoodRunSet())
+            {
+                AiModelState newState(initialState);
+                modifySet(newState, existingSet1);
+                addNewSet(newState, newSet);
+                verifyChangedState(initialState, newState);
+
+                turnPlay = findOneSimpleTurnPlay(newState, depth + 1);
+                if (!turnPlay.isNull())
+                    return turnPlay;
+            }
+        }
+    }
+
+    return {};
+}
+
+AiModelState AiModel::searchEquivalent3RearrangeSetsStates(const AiModelState &initialState, int depth) const
+{
+    AiModelState turnPlay;
+
+    // for each 3 complete sets which are all rank (of consecutive values) or run (of same ranks)
+    // rearrange them to make 3 complete sets of runs (if was ranks) or ranks (if was runs)
+    // and search again
+    for (const CardGroup &existingSet1 : initialState.cardGroups)
+    {
+        if (existingSet1.count() != 3)
+            continue;
+        CardGroup::SetType setType1;
+        if (!existingSet1.isGoodSet(setType1))
+            continue;
+        for (const CardGroup &existingSet2 : initialState.cardGroups)
+        {
+            if (existingSet2 == existingSet1)
+                continue;
+            if (existingSet2.count() != existingSet1.count())
+                continue;
+            if (!existingSet2.isGoodSetOfType(setType1))
+                continue;
+            for (const CardGroup &existingSet3 : initialState.cardGroups)
+            {
+                if (existingSet3 == existingSet1 || existingSet3 == existingSet2)
+                    continue;
+                if (existingSet3.count() != existingSet1.count())
+                    continue;
+                if (!existingSet3.isGoodSetOfType(setType1))
+                    continue;
+                CardGroups existingSets(CardGroups({existingSet1, existingSet2, existingSet3}));
+                CardGroups newSets = pivotSets(existingSets);
+                Q_ASSERT(newSets.count() == existingSets.count());
+                bool badSet = false;
+                for (CardGroup &newSet : newSets)
+                {
+                    newSet.rearrangeForSets();
+                    if (!newSet.isGoodSet())
+                        badSet = true;
+                }
+                if (!badSet)
+                {
+                    AiModelState newState(initialState);
+                    for (const CardGroup &existingSet : existingSets)
+                        removeSet(newState, existingSet);
+                    for (const CardGroup &newSet : newSets)
+                        addNewSet(newState, newSet);
+                    verifyChangedState(initialState, newState);
+
+                    turnPlay = findOneSimpleTurnPlay(newState, depth + 1);
+                    if (!turnPlay.isNull())
+                        return turnPlay;
+                }
+            }
+        }
+    }
+
+    return {};
+}
+
+
+AiModelState AiModel::searchEquivalentInitialStates(const AiModelState &initialState, int depth) const
+{
+    AiModelState turnPlay;
+
+    // for each free card, move to each other (complete) set and search again
+    turnPlay = searchEquivalent1FreeCardMoveStates(initialState, depth);
+    if (!turnPlay.isNull())
+        return turnPlay;
+
+    // for each complete run set, join onto each other complete run set and search again
+    turnPlay = searchEquivalent1JoinSetsStates(initialState, depth);
+    if (!turnPlay.isNull())
+        return turnPlay;
+
+    // for each long complete run set, split into each other short complete run set and search again
+    turnPlay = searchEquivalent1SplitSetsStates(initialState, depth);
+    if (!turnPlay.isNull())
+        return turnPlay;
+
+    // for each 3 complete sets which are all rank (of consecutive values) or run (of same ranks)
+    // rearrange them to make 3 complete sets of runs (if was ranks) or ranks (if was runs)
+    // and search again
+    turnPlay = searchEquivalent3RearrangeSetsStates(initialState, depth);
+    if (!turnPlay.isNull())
+        return turnPlay;
+
+    return {};
+}
+
+
 AiModelState AiModel::findOneComplexTurnPlay(const AiModelState &initialState, int depth) const
 {
     AiModelState turnPlay;
 
-    // // foreach rearrangement
-    // turnPlay = findOneSimpleTurnPlay(initialState, depth + 1);
-    // if (!turnPlay.isNull())
-    //     return turnPlay;
+    // rearrange initial state to equivalents and search in them
+    turnPlay = searchEquivalentInitialStates(initialState, depth);
+    if (!turnPlay.isNull())
+        return turnPlay;
 
     return {};
 }
+
 
 AiModelState AiModel::findOneTurnPlay() const
 {

@@ -89,30 +89,47 @@ void CardGroup::rearrangeForSets()
     }
 }
 
-bool CardGroup::isGoodSet(SetType &setType) const
+bool CardGroup::isGoodRankSet() const
 {
     if (count() < 3)
         return false;
-    if (at(1)->rank() == at(0)->rank())
+    // check for same rank (different suits)
+    QSet<int> suits;
+    for (const Card* card : *this)
+        if (card->rank() != at(0)->rank() || suits.contains(card->suit()))
+            return false;
+        else
+            suits.insert(card->suit());
+    return true;
+}
+
+bool CardGroup::isGoodRunSet() const
+{
+    if (count() < 3)
+        return false;
+    // check for sequential cards in same suit
+    // (assumes ordered as per `rearrangeForSets`)
+    for (int i = 1; i < count(); i++)
+        if (at(i)->suit() != at(i - 1)->suit() || rankDifference(at(i)->rank(), at(i - 1)->rank()) != -1)
+            return false;
+    return true;
+}
+
+bool CardGroup::isGoodSetOfType(SetType setTypeWanted) const
+{
+    return (setTypeWanted == SetType::RankSet) ? isGoodRankSet() : (setTypeWanted == SetType::RunSet) ? isGoodRunSet() : false;
+}
+
+bool CardGroup::isGoodSet(SetType &setType) const
+{
+    if (isGoodRankSet())
     {
-        // check for same rank (different suits)
-        QSet<int> suits;
-        for (const Card* card : *this)
-            if (card->rank() != at(0)->rank() || suits.contains(card->suit()))
-                return false;
-            else
-                suits.insert(card->suit());
-        setType = RankSet;
+        setType = SetType::RankSet;
         return true;
     }
-    else if (at(1)->suit() == at(0)->suit())
+    else if (isGoodRunSet())
     {
-        // check for sequential cards in same suit
-        // (assumes ordered as per `rearrangeForSets`)
-        for (int i = 1; i < count(); i++)
-            if (at(i)->suit() != at(i - 1)->suit() || rankDifference(at(i)->rank(), at(i - 1)->rank()) != -1)
-                return false;
-        setType = RunSet;
+        setType = SetType::RunSet;
         return true;
     }
     return false;
@@ -120,11 +137,11 @@ bool CardGroup::isGoodSet(SetType &setType) const
 
 bool CardGroup::isGoodSet() const
 {
-   SetType setType;
-   return isGoodSet(setType);
+    SetType setType;
+    return isGoodSet(setType);
 }
 
-void CardGroup::removeCards(QList<const Card *> cards)
+void CardGroup::removeCards(const QList<const Card *> &cards)
 {
     for (const Card *card : cards)
         removeOne(card);
@@ -135,6 +152,11 @@ void CardGroup::removeCards(QList<const Card *> cards)
 CardGroups::CardGroups()
 {
 
+}
+
+CardGroups::CardGroups(std::initializer_list<CardGroup> args) :
+    QList<CardGroup>(args)
+{
 }
 
 QString CardGroups::toString() const

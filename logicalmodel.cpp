@@ -31,7 +31,7 @@ void LogicalModel::dealInitialFreeCards()
 
 bool LogicalModel::isInitialCardGroup(const CardGroup &group) const
 {
-    return (group.count() == 1 && cardDeck.isInitialFreeCard(group.at(0)));
+    return (group.count() == 1 && cardDeck.isInitialFreeCard(group.first()));
 }
 
 CardGroup &LogicalModel::initialFreeCardGroup(const Card *card)

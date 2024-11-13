@@ -40,12 +40,21 @@ private:
     const CardHands &hands() const { return logicalModel->hands; }
     const CardHand &aiHand() const;
 
-    void verifyChangedState(AiModelState initialState, AiModelState newState) const;
     QList<const Card *> freeCardsInGroup(const CardGroup &group) const;
     QList<const Card *> findAllFreeCardsInGroups(const CardGroups &groups) const;
     void removeFirstCardRankSet(CardHand &hand, CardGroup &rankSet) const;
     void removeFirstCardRunSet(CardHand &hand, CardGroup &runSet) const;
     void removeFirstCardGenerateAll2CardPartialRunSets(CardHand &hand, CardGroups &runSets) const;
+    CardGroups pivotSets(CardGroups existingSets) const;
+    void verifyChangedState(AiModelState initialState, AiModelState newState) const;
+    void addNewSet(AiModelState &state, const CardGroup &newSet) const;
+    void modifySet(AiModelState &state, const CardGroup &modifiedSet) const;
+    void removeSet(AiModelState &state, const CardGroup &existingSet) const;
+    void removeCardFromHand(AiModelState &state, const Card *card) const;
+    void removeCardsFromHand(AiModelState &state, const QList<const Card *> &cards) const;
+    void removeCardFromGroups(AiModelState &state, const Card *card) const;
+    void removeCardsFromGroups(AiModelState &state, const QList<const Card *> &cards) const;
+    void removeCardsFromOneGroup(AiModelState &state, const QList<const Card *> &cards) const;
     AiModelStates findAllCompleteRankSetsInHand(const AiModelState &initialState) const;
     AiModelStates findAllCompleteRunSetsInHand(const AiModelState &initialState) const;
     AiModelStates findAllPartialRankSetsFrom2CardsInHand(const AiModelState &initialState) const;
@@ -61,6 +70,11 @@ private:
     AiModelStates findAllCompleteSetsFrom1CardInHand(const AiModelState &initialState) const;
     AiModelStates findAllMakeNewSetsFrom1CardInHand(const AiModelState &initialState) const;
     AiModelState findOneSimpleTurnPlay(const AiModelState &initialState, int depth) const;
+    AiModelState searchEquivalent1FreeCardMoveStates(const AiModelState &initialState, int depth) const;
+    AiModelState searchEquivalent1JoinSetsStates(const AiModelState &initialState, int depth) const;
+    AiModelState searchEquivalentInitialStates(const AiModelState &initialState, int depth) const;
+    AiModelState searchEquivalent1SplitSetsStates(const AiModelState &initialState, int depth) const;
+    AiModelState searchEquivalent3RearrangeSetsStates(const AiModelState &initialState, int depth) const;
     AiModelState findOneComplexTurnPlay(const AiModelState &initialState, int depth) const;
     AiModelState findOneTurnPlay() const;
 

@@ -23,9 +23,12 @@ public:
     QString toString() const;
     int rankDifference(int rank0, int rank1) const;
     void rearrangeForSets();
+    bool isGoodRankSet() const;
+    bool isGoodRunSet() const;
+    bool isGoodSetOfType(SetType setTypeWanted) const;
     bool isGoodSet(SetType &setType) const;
     bool isGoodSet() const;
-    void removeCards(QList<const Card *> cards);
+    void removeCards(const QList<const Card *> &cards);
 };
 
 
@@ -34,6 +37,7 @@ class CardGroups : public QList<CardGroup>
 {
 public:
     CardGroups();
+    CardGroups(std::initializer_list<CardGroup> args);
 
     QString toString() const;
     void clearGroups();
