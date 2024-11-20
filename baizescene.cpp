@@ -70,7 +70,7 @@ void CardGroupBoxItem::setShowAs(ShowAs showAs)
     switch (_showAs)
     {
     case ShowAsBadSet: pen.setColor(Qt::red); break;
-    case ShowAsGoodSet: pen.setColor(/*Qt::transparent*/Qt::cyan/*TEMPORARY*/); break;
+    case ShowAsGoodSet: pen.setColor(/*Qt::transparent*/Qt::cyan); break;
     case ShowAsInitialCardGroup: pen.setColor(Qt::yellow); break;
     }
     pen.setWidth(4);
@@ -133,6 +133,7 @@ BaizeScene::BaizeScene(QObject *parent) :
     this->_drawPileItem = nullptr;
     this->_blinkingCard = new CardBlinker(this);
     this->_preventMovingCards = false;
+    this->_showFreeRectangles = false;
 }
 
 BaizeScene::~BaizeScene()
@@ -306,7 +307,7 @@ void BaizeScene::layoutCardsAsGroup(const QList<const Card *> &cards, bool isBad
     for (const Card *card : cards)
     {
         CardPixmapItem *item = findItemForCard(card);
-        Q_ASSERT(card);
+        Q_ASSERT(item);
         items.append(item);
     }
 
@@ -373,13 +374,12 @@ QList<QRectF> BaizeScene::calcMaximalFreeRectangles()
     for (const QGraphicsItem *item : items)
     {
         QRectF rect(item->mapToScene(item->boundingRect()).boundingRect());
-        // NOT SURE THIS WORKS
         // treat _handAreaRectItem as extending full width of scene
-        // if (item == _handAreaRectItem)
-        // {
-        //     rect.setLeft(sceneRect().left());
-        //     rect.setRight(sceneRect().right());
-        // }
+        if (item == _handAreaRectItem)
+        {
+            rect.setLeft(sceneRect().left());
+            rect.setRight(sceneRect().right());
+        }
         verticalLines.append(rect.left());
         verticalLines.append(rect.right());
         horizontalLines.append(rect.top());
@@ -401,9 +401,18 @@ QList<QRectF> BaizeScene::calcMaximalFreeRectangles()
             bool intersects = false;
             for (const QGraphicsItem *item : items)
             {
-                const QRectF &rect(item->mapToScene(item->boundingRect()).boundingRect());
+                QRectF rect(item->mapToScene(item->boundingRect()).boundingRect());
+                // treat _handAreaRectItem as extending full width of scene
+                if (item == _handAreaRectItem)
+                {
+                    rect.setLeft(sceneRect().left());
+                    rect.setRight(sceneRect().right());
+                }
                 if (rect.intersects(candidateRect))
+                {
                     intersects = true;
+                    break;
+                }
             }
             if (!intersects)
                 freeRectangles.append(candidateRect);
@@ -428,6 +437,8 @@ QList<QRectF> BaizeScene::findFreeRectanglesToPlaceCards(int cardCount, QRectF p
         placeInRect = sceneRect();
 
     QSize cardsSize(cardsAsGroupSize(cardCount));
+    const int extraGapWidth = 50;
+    cardsSize.rwidth() += extraGapWidth;
 
     QList<QRectF> result;
     QList<QRectF> freeRectangles = calcMaximalFreeRectangles();
@@ -439,15 +450,6 @@ QList<QRectF> BaizeScene::findFreeRectanglesToPlaceCards(int cardCount, QRectF p
     }
 
     return result;
-}
-
-void BaizeScene::showFreeRectangles(const QList<QRectF> &freeRectangles)
-{
-    qDebug() << __FUNCTION__ << "count:" << freeRectangles.count();
-    QGraphicsRectItem *background = this->addRect(this->sceneRect(), QPen(), QBrush(Qt::yellow));
-    background->setZValue(-1000);
-    for (const QRectF &rect : freeRectangles)
-        this->addRect(rect, QPen(), QBrush(Qt::cyan))->setZValue(-500);
 }
 
 
@@ -507,9 +509,20 @@ void BaizeScene::deserializeFromJson(const QJsonObject &obj, const CardDeck &car
 
     // draw that part of the baize which lies in `rect`
 
-    // fill a rect and draw a frame
+    // fill a rect with "green baize"
     painter->fillRect(sceneRect(), 0x3ab503);
+
+    if (_showFreeRectangles)
+    {
+        painter->fillRect(sceneRect(), Qt::yellow);
+        const QList<QRectF> freeRectangles = calcMaximalFreeRectangles();
+        for (const QRectF &rect : freeRectangles)
+            painter->fillRect(rect, Qt::cyan);
+    }
+
+    // and draw a frame outside
     painter->drawRect(sceneRect());
+
     painter->restore();
 }
 
@@ -526,7 +539,7 @@ void BaizeScene::deserializeFromJson(const QJsonObject &obj, const CardDeck &car
 {
     if (_preventMovingCards)
     {
-        qDebug() << "_preventMovingCards";
+        // qDebug() << "_preventMovingCards";
         QGraphicsItem *item = itemAt(event->scenePos(), QTransform());
         CardPixmapItem *cardItem = dynamic_cast<CardPixmapItem *>(item);
         if (cardItem)

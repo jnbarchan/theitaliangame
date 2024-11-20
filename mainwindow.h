@@ -7,8 +7,7 @@
 
 #include "logicalmodel.h"
 #include "aimodel.h"
-// #include "baizescene.h"
-// #include "baizeview.h"
+
 class BaizeScene;
 class BaizeView;
 class CardPixmapItem;
@@ -26,8 +25,10 @@ protected:
 
 private:
     bool fixHandsToView;
-    bool autoEndTurn;
+    bool autoEndTurnOnDrawCard;
     bool haveDrawnCard;
+    bool aiContinuousPlay, _aiContinuousPlayFast;
+    bool aiContinuousPlayFast() const { return aiContinuousPlay && _aiContinuousPlayFast; }
 
     LogicalModel logicalModel;
     int &activePlayer = logicalModel.activePlayer;
@@ -68,11 +69,13 @@ private:
     void showInitialFreeCards();
     void sortAndShow();
     int findCardInHandArea(const CardPixmapItem *item) const;
-    void tidyGroups();
+    void verifyInitialGroups();
+    void tidyGroups(bool verifyNoBadBads = false);
     bool havePlayedCard() const;
     void startTurn(bool restart = false);
     void autosave();
     QPointF findFreeAreaForCardGroup(const CardGroup &cardGroup) const;
+    void reportDealIsOver(int winner);
     void aiModelMakePlays(const AiModelState &turnPlay);
     QJsonDocument serializeToJson() const;
     void deserializeFromJson(const QJsonDocument &doc);
@@ -84,6 +87,7 @@ private slots:
     void drawCardFromDrawPile();
     void extractCardFromDrawPile(int id);
     void aiModelMakeTurnPlay(AiModelState turnPlay);
+    void actionAiContinuousPlay(bool checked);
     void actionHandLayout(HandLayout handLayout);
     void actionLoadFile();
     void actionSaveFile();

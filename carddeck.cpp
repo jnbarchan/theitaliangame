@@ -37,9 +37,14 @@ void CardDeck::shuffle()
     resetForNewDeal();
 }
 
+bool CardDeck::canDealNextCard() const
+{
+    return (nextCardToBeDealt < count());
+}
+
 const Card *CardDeck::dealNextCard()
 {
-    if (nextCardToBeDealt >= count())
+    if (!canDealNextCard())
         return nullptr;
     return at(nextCardToBeDealt++);
 }
@@ -59,6 +64,7 @@ int CardDeck::findCardIndex(int id) const
         if (at(i)->id == id)
             return i;
     Q_ASSERT(false);
+    return -1;
 }
 
 const Card *CardDeck::findCard(int id) const

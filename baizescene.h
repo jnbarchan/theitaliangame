@@ -88,7 +88,6 @@ public:
     QSize cardsAsGroupSize(int cardCount);
     void layoutCardsAsGroup(const QList<const Card *> &cards, bool isBadSetGroup = false, bool isInitialCardGroup = false);
     QList<QRectF> findFreeRectanglesToPlaceCards(int cardCount, QRectF placeInRect = QRectF());
-    void showFreeRectangles(const QList<QRectF> &freeRectangles);
     QJsonObject serializeToJson() const;
     void deserializeFromJson(const QJsonObject &obj, const CardDeck &cardDeck);
 
@@ -99,6 +98,7 @@ private:
     QGraphicsTextItem *_playerNameItem;
     QGraphicsProxyWidget *_drawCardEndTurnButton;
     CardBlinker *_blinkingCard;
+    bool _showFreeRectangles;
     bool _preventMovingCards;
     const QPixmap cardBackPixmap() const;
     void createDrawPile();

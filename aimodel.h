@@ -11,8 +11,8 @@ public:
     CardHand aiHand;
     CardGroups cardGroups;
 
-    AiModelState() {}
-    AiModelState(const CardHand &aiHand, const CardGroups &cardGroups) { this->aiHand = aiHand; this->cardGroups = cardGroups; }
+    AiModelState();
+    AiModelState(const CardHand &aiHand, const CardGroups &cardGroups);
     bool isNull() const { return (aiHand.isEmpty() && cardGroups.isEmpty()); }
 };
 
@@ -31,15 +31,28 @@ class AiModel : public QObject
 public:
     explicit AiModel(QObject *parent = nullptr);
 
+    int debugLevel() const { return _debugLevel; }
+    void setDebugLevel(int level) { _debugLevel = level; }
+
+    struct Statistics
+    {
+        long isGoodSetCalls;
+        long aiModelStatesCreated;
+    };
+    static Statistics statistics;
+
     LogicalModel *logicalModel;
 
 private:
+    int _debugLevel;
     const CardDeck &cardDeck() const { return logicalModel->cardDeck; }
     int activePlayer() const { return logicalModel->activePlayer; }
     const CardGroups &cardGroups() const { return logicalModel->cardGroups; }
     const CardHands &hands() const { return logicalModel->hands; }
     const CardHand &aiHand() const;
 
+    void resetStatistics();
+    void showStatistics();
     QList<const Card *> freeCardsInGroup(const CardGroup &group) const;
     QList<const Card *> findAllFreeCardsInGroups(const CardGroups &groups) const;
     void removeFirstCardRankSet(CardHand &hand, CardGroup &rankSet) const;
@@ -49,7 +62,7 @@ private:
     void verifyChangedState(AiModelState initialState, AiModelState newState) const;
     void addNewSet(AiModelState &state, const CardGroup &newSet) const;
     void modifySet(AiModelState &state, const CardGroup &modifiedSet) const;
-    void removeSet(AiModelState &state, const CardGroup &existingSet) const;
+    void clearSet(AiModelState &state, const CardGroup &existingSet) const;
     void removeCardFromHand(AiModelState &state, const Card *card) const;
     void removeCardsFromHand(AiModelState &state, const QList<const Card *> &cards) const;
     void removeCardFromGroups(AiModelState &state, const Card *card) const;
@@ -59,6 +72,9 @@ private:
     AiModelStates findAllCompleteRunSetsInHand(const AiModelState &initialState) const;
     AiModelStates findAllPartialRankSetsFrom2CardsInHand(const AiModelState &initialState) const;
     AiModelStates findAllPartialRunSetsFrom2CardsInHand(const AiModelState &initialState) const;
+    AiModelStates rearrangeBrokenSetOnBaizeToOtherSets(const AiModelState &initialState, const CardGroup &brokenSet) const;
+    AiModelStates completePartialRankSetFrom1CardOnBaizeWithRearrangement(const AiModelState &initialState) const;
+    AiModelStates completePartialRunSetFrom1CardOnBaizeWithRearrangement(const AiModelState &initialState) const;
     AiModelStates completePartialRankSetFrom1CardOnBaize(const AiModelState &initialState) const;
     AiModelStates completePartialRunSetFrom1CardOnBaize(const AiModelState &initialState) const;
     AiModelStates findAllCompleteRankSetsFrom2CardsInHand(const AiModelState &initialState) const;

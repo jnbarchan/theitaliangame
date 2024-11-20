@@ -15,6 +15,7 @@ public:
     void resetForNewDeal();
     void createCards();
     void shuffle();
+    bool canDealNextCard() const;
     const Card *dealNextCard();
     const Card *extractCardFromDrawPile(int index);
     const Card *findCard(int id) const;

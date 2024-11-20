@@ -2,11 +2,34 @@
 
 LogicalModel::LogicalModel()
 {
+    this->totalDeals = 0;
+}
 
+bool LogicalModel::isDealOver(bool needToDrawCard, int &winner) const
+{
+    for (int i = 0; i < hands.count(); i++)
+        if (hands.at(i).isEmpty())
+        {
+            winner = i;
+            return true;
+        }
+    // VERYTEMPORARY
+    winner = -1;
+    if (needToDrawCard)
+        if (!cardDeck.canDealNextCard())
+            return true;
+    return false;
+}
+
+bool LogicalModel::isDealOver(bool needToDrawCard) const
+{
+    int winner;
+    return isDealOver(needToDrawCard, winner);
 }
 
 void LogicalModel::shuffleAndDeal()
 {
+    totalDeals++;
     cardGroups.clearGroups();
 
     cardDeck.shuffle();
@@ -44,6 +67,18 @@ CardGroup &LogicalModel::initialFreeCardGroup(const Card *card)
     return group;
 }
 
+void LogicalModel::updateInitialFreeCards()
+{
+    const QList<const Card *> initialFreeCards(cardDeck.initialFreeCards());
+    for (const Card *card : initialFreeCards)
+    {
+        int inGroup = cardGroups.findCardInGroups(card);
+        Q_ASSERT(inGroup >= 0);
+        if (cardGroups.at(inGroup).count() > 1)
+            cardDeck.removeFromInitialFreeCards(card);
+    }
+}
+
 CardGroups LogicalModel::badSetGroups() const
 {
     CardGroups badSets;
@@ -75,18 +110,10 @@ const Card *LogicalModel::extractCardFromDrawPile(int index)
     return card;
 }
 
-void LogicalModel::updateInitialFreeCards()
-{
-    for (const Card *card : cardDeck.initialFreeCards())
-    {
-        int inGroup = cardGroups.findCardInGroups(card);
-        if (inGroup >= 0 && cardGroups.at(inGroup).count() > 1)
-            cardDeck.removeFromInitialFreeCards(card);
-    }
-}
-
 void LogicalModel::startOfTurn()
 {
+    updateInitialFreeCards();
+
     _startOfTurnHand = hands.at(activePlayer);
 }
 

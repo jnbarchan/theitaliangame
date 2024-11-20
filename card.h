@@ -7,6 +7,12 @@
 class Card
 {
 public:
+    int id;
+
+private:
+#ifdef QT_DEBUG
+    QString _debugStr;
+#endif
 
 public:
     Card(int id);
@@ -16,14 +22,6 @@ public:
     inline int rank() const { return id % 52 / 4; }
     QString toString() const;
     static bool compareForSortBySuit(const Card *cardA, const Card *cardB);
-
-public:
-    int id;
-
-private:
-#ifdef QT_DEBUG
-    QString _debugStr;
-#endif
 };
 
 #endif // CARD_H

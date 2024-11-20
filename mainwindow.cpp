@@ -37,7 +37,9 @@ MainWindow::MainWindow(QWidget *parent)
     setupUi();
 
     this->fixHandsToView = true;
-    this->autoEndTurn = false;
+    this->autoEndTurnOnDrawCard = false;
+    this->aiContinuousPlay = false;
+    this->_aiContinuousPlayFast = true;
 
     // signal connections
     connect(baizeView, &BaizeView::viewCoordinatesChanged, this, &MainWindow::baizeViewCoordinatesChanged);
@@ -56,9 +58,11 @@ MainWindow::MainWindow(QWidget *parent)
     hands.aiPlayers = { true };
     hands.initialHandCardCount = 13;
 
+    this->aiModel.setDebugLevel(0);
     this->aiModel.logicalModel = &this->logicalModel;
 
     actionDeal();
+    Q_ASSERT(!logicalModel.isDealOver(true));
 }
 
 MainWindow::~MainWindow()
@@ -107,6 +111,10 @@ void MainWindow::setupUi()
     this->mainMenu = new QMenu("File", this);
     menuBar()->addMenu(mainMenu);
     QList<QAction *> actions;
+
+    QAction *menuActionAiContinuousPlay = mainMenu->addAction("AI Continuous Play", this, &MainWindow::actionAiContinuousPlay);
+    menuActionAiContinuousPlay->setCheckable(true);
+    mainMenu->addSeparator();
 
     QMenu *handLayoutSubmenu = new QMenu("Hand Layout", mainMenu);
     QActionGroup *handLayoutGroup = new QActionGroup(handLayoutSubmenu);
@@ -207,6 +215,8 @@ QRectF MainWindow::handAreaRect(int player) const
 
 void MainWindow::hideHand(int player)
 {
+    if (aiContinuousPlayFast())
+        return;
     const CardHand &hand(hands.at(player));
     for (int x = 0; x < hand.count(); x++)
     {
@@ -218,6 +228,8 @@ void MainWindow::hideHand(int player)
 
 void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
 {
+    if (aiContinuousPlayFast())
+        return;
     const CardHand &hand(hands.at(player));
     HandCardLayoutInfo hcli;
     handCardLayoutInfo(player, hand.count(), hcli);
@@ -282,12 +294,15 @@ void MainWindow::showHand(int player, bool enforceCorrectStacking /*= false*/)
 
 void MainWindow::shuffleAndDeal()
 {
-    baizeScene->reset();
+    if (!aiContinuousPlayFast())
+        baizeScene->reset();
     logicalModel.shuffleAndDeal();
 }
 
 void MainWindow::showInitialFreeCards()
 {
+    if (aiContinuousPlayFast())
+        return;
     for (int i = 0; i < cardDeck.initialFreeCards().count(); i++)
     {
         const Card *card = cardDeck.initialFreeCards().at(i);
@@ -311,16 +326,20 @@ int MainWindow::findCardInHandArea(const CardPixmapItem *item) const
     return -1;
 }
 
-void MainWindow::tidyGroups()
+void MainWindow::tidyGroups(bool verifyNoBadBads /*= false*/)
 {
     cardGroups.removeEmptyGroups();
-    baizeScene->removeAllCardGroupBoxes();
+    if (!aiContinuousPlayFast())
+        baizeScene->removeAllCardGroupBoxes();
     for (CardGroup &group : cardGroups)
     {
         group.rearrangeForSets();
         bool isBadSetGroup = !group.isGoodSet();
         bool isInitialCardGroup = logicalModel.isInitialCardGroup(group);
-        baizeScene->layoutCardsAsGroup(group, isBadSetGroup, isInitialCardGroup);
+        if (verifyNoBadBads)
+            Q_ASSERT(!isBadSetGroup || isInitialCardGroup);
+        if (!aiContinuousPlayFast())
+            baizeScene->layoutCardsAsGroup(group, isBadSetGroup, isInitialCardGroup);
     }
 }
 
@@ -334,6 +353,7 @@ bool MainWindow::havePlayedCard() const
 
 void MainWindow::startTurn(bool restart /*= false*/)
 {
+    Q_ASSERT(!logicalModel.isDealOver(true));
     haveDrawnCard = false;
     if (!restart)
     {
@@ -344,11 +364,13 @@ void MainWindow::startTurn(bool restart /*= false*/)
     updateDrawCardEndTurnAction();
 
     if (hands.isAiPlayer(activePlayer))
-        QTimer::singleShot(100, this, [this]() { emit aiModelMakeTurn(); });
+        QTimer::singleShot(aiContinuousPlayFast() ? 0 : restart ? 2000 : 100, this, [this]() { emit aiModelMakeTurn(); });
 }
 
 void MainWindow::autosave()
 {
+    if (aiContinuousPlayFast())
+        return;
     Q_ASSERT(!serializationDoc.isEmpty());
     const QString newPath = appSavesPath() + "/autosave.sav", backupPath = appSavesPath() + "/autosave.prev.sav";
     QFile::remove(backupPath);
@@ -364,6 +386,8 @@ void MainWindow::autosave()
 QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
 {
     // (try to) find free area for card group
+    if (aiContinuousPlayFast())
+        return QPointF();
     QList<QRectF> freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count(), baizeView->visibleSceneRect());
     if (freeRectangles.isEmpty())
         freeRectangles = baizeScene->findFreeRectanglesToPlaceCards(cardGroup.count());
@@ -381,12 +405,20 @@ QPointF MainWindow::findFreeAreaForCardGroup(const CardGroup &cardGroup) const
     return newGroupPoint;
 }
 
+void MainWindow::reportDealIsOver(int winner)
+{
+    qDebug() << ((winner >= 0) ? "+++" : "---")
+             << qUtf8Printable(QString("Deal #%1 over").arg(logicalModel.totalDeals))
+             << ((winner >= 0) ? QString("Winner: %1").arg(winner) : QString("No winner"));
+}
+
 void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
 {
     Q_ASSERT(hands.isAiPlayer(activePlayer));
     CardHand &aiHand(hands[activePlayer]);
     const CardGroups &cardGroupsChanged(turnPlay.cardGroups);
     Q_ASSERT(!cardGroupsChanged.isEmpty());
+    const AiModelState originalState(aiHand, cardGroups);
 
     for (int pass = 0; pass < 2; pass++)
         for (const CardGroup &changedCardGroup : cardGroupsChanged)
@@ -405,7 +437,6 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
             else if (pass == 1 && changeType != Delete)
                 continue;
 
-            Q_ASSERT((changeType == Delete) ? changedCardGroup.isEmpty() : !changedCardGroup.isEmpty());
             if (changeType == Add && changedCardGroup.isEmpty())
                 continue;
             else if (changeType == Delete && oldCardGroupIndex < 0)
@@ -416,6 +447,8 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
             if (changeType == Delete)
             {
                 Q_ASSERT(cardGroups.at(oldCardGroupIndex).isEmpty());
+                if (aiModel.debugLevel() >= 1)
+                    qDebug() << "    " << __FUNCTION__ << "Deleted Group" << changedCardGroup.uniqueId() << originalState.cardGroups.at(oldCardGroupIndex).toString();
                 continue;
             }
 
@@ -426,6 +459,8 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
 
             if (changeType == Add)
             {
+                if (aiModel.debugLevel() >= 1)
+                    qDebug() << "    " << __FUNCTION__ << "Added Group" << changedCardGroup.uniqueId() << changedCardGroup.toString();
                 // (try to) find free area for new card group
                 QPointF newGroupPoint = findFreeAreaForCardGroup(changedCardGroup);
 
@@ -435,21 +470,24 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
                         aiHand.removeOne(card);
                     else
                     {
-                        int wasInGroup = cardGroups.findCardInGroups(card);
+                        int wasInGroup = cardGroups.removeCardFromGroups(card);
                         Q_ASSERT(wasInGroup >= 0);
-                        cardGroups[wasInGroup].removeOne(card);
                     }
-                    CardPixmapItem *item = baizeScene->findItemForCard(card);
-                    Q_ASSERT(item);
-                    item->setPos(newGroupPoint);
+                    if (!aiContinuousPlayFast())
+                    {
+                        CardPixmapItem *item = baizeScene->findItemForCard(card);
+                        Q_ASSERT(item);
+                        item->setPos(newGroupPoint);
+                    }
                 }
                 cardGroups.append(changedCardGroup);
             }
             else if (changeType == Modify)
             {
+                if (aiModel.debugLevel() >= 1)
+                    qDebug() << "    " << __FUNCTION__ << "Modified Group" << changedCardGroup.uniqueId() << originalState.cardGroups.at(oldCardGroupIndex).toString() << "-->" << changedCardGroup.toString();
                 CardGroup &existingCardGroup(cardGroups[oldCardGroupIndex]);
                 const Card *existingGroupCard = existingCardGroup.first();
-                const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
                 for (const Card *card : changedCardGroup)
                 {
                     if (aiHand.contains(card))
@@ -458,21 +496,26 @@ void MainWindow::aiModelMakePlays(const AiModelState &turnPlay)
                     {
                         if (existingCardGroup.contains(card))
                             continue;
-                        int wasInGroup = cardGroups.findCardInGroups(card);
+                        int wasInGroup = cardGroups.removeCardFromGroups(card);
                         Q_ASSERT(wasInGroup >= 0);
-                        cardGroups[wasInGroup].removeOne(card);
                     }
                     existingCardGroup.append(card);
-                    CardPixmapItem *item = baizeScene->findItemForCard(card);
-                    Q_ASSERT(item);
-                    item->setPos(existingGroupItem->pos());
+                    if (!aiContinuousPlayFast())
+                    {
+                        CardPixmapItem *item = baizeScene->findItemForCard(card);
+                        Q_ASSERT(item);
+                        const CardPixmapItem *existingGroupItem = baizeScene->findItemForCard(existingGroupCard);
+                        Q_ASSERT(existingGroupItem);
+                        item->setPos(existingGroupItem->pos());
+                    }
                 }
             }
         }
 
     // tidy up
+    logicalModel.updateInitialFreeCards();
+    tidyGroups(true);
     showHand(activePlayer);
-    tidyGroups();
     updateDrawCardEndTurnAction();
 }
 
@@ -503,6 +546,8 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 
 /*slot*/ void MainWindow::baizeViewCoordinatesChanged()
 {
+    if (aiContinuousPlayFast())
+        return;
     if (!fixHandsToView)
         return;
     showHands();
@@ -512,6 +557,8 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 
 /*slot*/ void MainWindow::baizeSceneSingleCardMoved(CardPixmapItem *item)
 {
+    if (aiContinuousPlayFast())
+        return;
     Q_ASSERT(item);
     Q_ASSERT(item->card);
 
@@ -618,13 +665,16 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     const Card *card = logicalModel.drawCardFromDrawPile();
     if (card == nullptr)
         return;
-    showHand(activePlayer, true);
-    baizeScene->blinkingCard()->start(card);
+    if (!aiContinuousPlayFast())
+    {
+        showHand(activePlayer, true);
+        baizeScene->blinkingCard()->start(card);
+    }
 
     haveDrawnCard = true;
     updateDrawCardEndTurnAction();
 
-    if (autoEndTurn)
+    if (autoEndTurnOnDrawCard && !aiContinuousPlay)
         QTimer::singleShot(2000, this, &MainWindow::actionDrawCardEndTurn);
 }
 
@@ -633,21 +683,71 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
     const Card *card = logicalModel.extractCardFromDrawPile(id);
     if (card == nullptr)
         return;
-    showHand(activePlayer, true);
-    baizeScene->blinkingCard()->start(card);
+    if (!aiContinuousPlayFast())
+    {
+        showHand(activePlayer, true);
+        baizeScene->blinkingCard()->start(card);
+    }
 }
 
 /*slot*/ void MainWindow::aiModelMakeTurnPlay(AiModelState turnPlay)
 {
     if (turnPlay.isNull())
     {
-        qDebug() << __FUNCTION__ << "AI draws card";
+        if (aiModel.debugLevel() >= 1)
+            qDebug() << __FUNCTION__ << "AI draws card";
         drawCardFromDrawPile();
     }
     else
     {
-        qDebug() << __FUNCTION__ << "AI makes play(s)";
+        if (aiModel.debugLevel() >= 1)
+            qDebug() << __FUNCTION__ << "AI makes play(s)";
         aiModelMakePlays(turnPlay);
+    }
+
+    if (aiContinuousPlay)
+    {
+        int winner;
+        if (logicalModel.isDealOver(turnPlay.isNull(), winner))
+        {
+            reportDealIsOver(winner);
+            QTimer::singleShot(aiContinuousPlayFast() ? 10 : 2000, this, &MainWindow::actionDeal);
+            return;
+        }
+        actionDrawCardEndTurn();
+    }
+}
+
+/*slot*/ void MainWindow::actionAiContinuousPlay(bool checked)
+{
+    if (checked == aiContinuousPlay)
+        return;
+    aiContinuousPlay = checked;
+    if (aiContinuousPlay)
+    {
+        hands.aiPlayers.clear();
+        for (int i = 0; i < hands.totalHands; i++)
+            hands.aiPlayers.append(true);
+        actionDeal();
+    }
+    else
+    {
+        logicalModel.updateInitialFreeCards();
+        baizeScene->reset();
+        showInitialFreeCards();
+        for (const CardGroup &cardGroup : cardGroups)
+        {
+            if (logicalModel.isInitialCardGroup(cardGroup))
+                continue;
+            if (cardGroup.isEmpty())
+                continue;
+            QPointF newGroupPoint = findFreeAreaForCardGroup(cardGroup);
+            for (const Card *card : cardGroup)
+                baizeScene->addCard(card, newGroupPoint.x(), newGroupPoint.y());
+        }
+        tidyGroups(true);
+        serializationDoc = serializeToJson();
+        showHands();
     }
 }
 
@@ -704,27 +804,42 @@ void MainWindow::deserializeFromJson(const QJsonDocument &doc)
 /*slot*/ void MainWindow::actionRestartTurn()
 {
     deserializeFromJson(serializationDoc);
-    tidyGroups();
+    logicalModel.updateInitialFreeCards();
+    tidyGroups(true);
     showHands();
     startTurn(true);
 }
 
 void MainWindow::updateDrawCardEndTurnAction()
 {
+    if (aiContinuousPlayFast())
+        return;
     menuActionDrawCardEndTurn->setText((havePlayedCard() || haveDrawnCard) ? "End Turn" : "Draw Card");
     baizeScene->setPreventMovingCards(haveDrawnCard);
     menuActionDrawCardEndTurn->setEnabled(logicalModel.badSetGroups().isEmpty());
+    if (logicalModel.isDealOver(true))
+        menuActionDrawCardEndTurn->setEnabled(false);
 }
 
 /*slot*/ void MainWindow::actionDrawCardEndTurn()
 {
+    if (aiContinuousPlayFast())
+        baizeScene->blinkingCard()->stop();
+
     if (!havePlayedCard() && !haveDrawnCard)
     {
         drawCardFromDrawPile();
         return;
     }
 
-    baizeScene->blinkingCard()->stop();
+    int winner;
+    if (logicalModel.isDealOver(true, winner))
+    {
+        reportDealIsOver(winner);
+        showHands();
+        menuActionDrawCardEndTurn->setEnabled(false);
+        return;
+    }
 
     logicalModel.endOfTurn();
     showHands();

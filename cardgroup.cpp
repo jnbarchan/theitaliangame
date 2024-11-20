@@ -1,6 +1,5 @@
 #include <QDebug>
 
-#include "utils.h"
 #include "cardgroup.h"
 
 /*static*/ long CardGroup::_nextUniqueId = 1L;
@@ -8,17 +7,26 @@
 CardGroup::CardGroup()
 {
     this->_uniqueId = _nextUniqueId++;
+    valueChanged();
 }
 
 CardGroup::CardGroup(std::initializer_list<const Card *> args) :
     QList<const Card *>(args)
 {
     this->_uniqueId = _nextUniqueId++;
+    valueChanged();
 }
 
 /*static*/ void CardGroup::resetNextUniqueId()
 {
     CardGroup::_nextUniqueId = 1L;
+}
+
+void CardGroup::valueChanged()
+{
+#ifdef QT_DEBUG
+    this->_debugStr = toString();
+#endif
 }
 
 QString CardGroup::toString() const
@@ -55,7 +63,8 @@ void CardGroup::rearrangeForSets()
     {
         if (card0->suit() == card1->suit())
             if (rankDifference(card0->rank(), card1->rank()) == -1)
-                swapItemsAt(0, 1);
+                QList<const Card *>::swapItemsAt(0, 1);
+        valueChanged();
         return;
     }
     if (card0->rank() == card1->rank())
@@ -64,7 +73,7 @@ void CardGroup::rearrangeForSets()
         int nextArrangedIndex = 2;
         for (int i = nextArrangedIndex; i < count(); i++)
             if (at(i)->rank() == card0->rank())
-                move(i, nextArrangedIndex++);
+                QList<const Card *>::move(i, nextArrangedIndex++);
     }
     else if (card0->suit() == card1->suit())
     {
@@ -77,16 +86,17 @@ void CardGroup::rearrangeForSets()
         {
             if (at(i)->suit() == at(nextArrangedIndex - 1)->suit() && rankDifference(at(i)->rank(), at(nextArrangedIndex - 1)->rank()) == -1)
             {
-                move(i, nextArrangedIndex);
+                QList<const Card *>::move(i, nextArrangedIndex);
                 i = ++nextArrangedIndex - 1;
             }
             else if (at(i)->suit() == at(0)->suit() && rankDifference(at(i)->rank(), at(0)->rank()) == 1)
             {
-                move(i, 0);
+                QList<const Card *>::move(i, 0);
                 i = ++nextArrangedIndex - 1;
             }
         }
     }
+    valueChanged();
 }
 
 bool CardGroup::isGoodRankSet() const
@@ -144,7 +154,8 @@ bool CardGroup::isGoodSet() const
 void CardGroup::removeCards(const QList<const Card *> &cards)
 {
     for (const Card *card : cards)
-        removeOne(card);
+        QList<const Card *>::removeOne(card);
+    valueChanged();
 }
 
 
